@@ -3,10 +3,28 @@ import 'package:bakepro/utils/number_parsing.dart';
 import 'package:flutter/foundation.dart';
 
 class KitTotals {
-  const KitTotals({this.totalProdutos, this.totalEmbalagens});
+  const KitTotals({this.totalProdutos, this.totalEmbalagens, this.taxaAdmEmbalagemPct});
 
   final num? totalProdutos;
   final num? totalEmbalagens;
+
+  /// Percentual de taxa administrativa sobre embalagens (`empresasetup.taxaadm`).
+  final num? taxaAdmEmbalagemPct;
+
+  /// Embalagens acrescidas da taxa adm (mesma regra da tela de edição do kit).
+  num? get totalEmbalagensComTaxa {
+    final b = totalEmbalagens;
+    if (b == null) return null;
+    return b * (1 + ((taxaAdmEmbalagemPct ?? 0) / 100));
+  }
+
+  /// "Valor total do kit" exibido na tela de edição: produtos + embalagens com taxa adm.
+  num? get totalKitComTaxa {
+    final a = totalProdutos;
+    final b = totalEmbalagensComTaxa;
+    if (a == null && b == null) return null;
+    return (a ?? 0) + (b ?? 0);
+  }
 
   num? get totalKit {
     final a = totalProdutos;
@@ -21,7 +39,28 @@ class KitService {
   static const String _kitProdutoTable = 'kitproduto';
   static const String _kitEmbalagemTable = 'kitembalagem';
 
-  Future<KitTotals> loadTotals(int kitId) async {
+  // Cache do empresasetup por empresa para não repetir a consulta a cada kit da lista.
+  static final Map<int, Future<Map<String, dynamic>?>> _setupByEmpresa = {};
+
+  Future<Map<String, dynamic>?> _loadEmpresaSetup(int empresaId) {
+    return _setupByEmpresa.putIfAbsent(empresaId, () async {
+      try {
+        return await SupabaseService.selectSingle('empresasetup', filters: {'empresaid': empresaId});
+      } catch (e) {
+        debugPrint('KitService load empresasetup failed empresaId=$empresaId: $e');
+        _setupByEmpresa.remove(empresaId);
+        return null;
+      }
+    });
+  }
+
+  /// Descarta o empresasetup em cache (chamar após salvar o Setup).
+  static void clearEmpresaSetupCache() => _setupByEmpresa.clear();
+
+  Future<num?> _loadTaxaAdmPct(int empresaId) async =>
+      parsePtBrNumber((await _loadEmpresaSetup(empresaId))?['taxaadm']);
+
+  Future<KitTotals> loadTotals(int kitId, {int? empresaId}) async {
     try {
       final kps = await SupabaseService.select(
         _kitProdutoTable,
@@ -59,7 +98,9 @@ class KitService {
         totalEmbalagens = (totalEmbalagens ?? 0) + (unit * qty);
       }
 
-      return KitTotals(totalProdutos: totalProdutos, totalEmbalagens: totalEmbalagens);
+      final taxaAdmPct = empresaId == null ? null : await _loadTaxaAdmPct(empresaId);
+
+      return KitTotals(totalProdutos: totalProdutos, totalEmbalagens: totalEmbalagens, taxaAdmEmbalagemPct: taxaAdmPct);
     } catch (e) {
       debugPrint('KitService.loadTotals failed kitId=$kitId: $e');
       rethrow;

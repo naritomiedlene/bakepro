@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:bakepro/pages/cadastros/cadastro_definitions.dart';
+import 'package:bakepro/services/kit_service.dart';
 import 'package:bakepro/services/totaldespesas_service.dart';
 import 'package:bakepro/services/state/app_session_controller.dart';
 import 'package:bakepro/supabase/supabase_config.dart';
@@ -393,6 +394,10 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
 
   bool get _isEdit => widget.initialRow != null;
 
+  // Imposto e taxas da empresa (tabela `empresasetup`).
+  bool get _isEmpresaTaxas => widget.definition.keyName == 'empresataxas';
+  static const Set<String> _empresaTaxasValueColumns = {'imposto', 'taxaadm', 'taxamotoboy'};
+
   bool get _isUsuario => widget.definition.keyName == 'usuario';
 
   bool get _isProduto => widget.definition.keyName == 'produto';
@@ -753,6 +758,9 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       if (widget.definition.keyName == 'empresadelivery' && f.column == 'taxadelivery') {
         return _formatPtBrThousands(parsed, 2);
       }
+      if (_isEmpresaTaxas && _empresaTaxasValueColumns.contains(f.column)) {
+        return _formatPtBrThousands(parsed, 2);
+      }
       // Other numeric fields: keep as-is.
       return rawText;
     }
@@ -946,8 +954,8 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     super.didChangeDependencies();
     final session = context.watch<AppSessionController>();
 
-    // EmpresaDelivery: para usuário tipo E, travar/preencher a empresa logada.
-    if (widget.definition.keyName == 'empresadelivery') {
+    // EmpresaDelivery / Imposto e taxas: para usuário tipo E, travar/preencher a empresa logada.
+    if (widget.definition.keyName == 'empresadelivery' || _isEmpresaTaxas) {
       if (session.isSuperAdmin) return;
 
       final tipo = (session.profile?.tipoUsuario ?? '').trim().toUpperCase();
@@ -1162,6 +1170,28 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       if (!stillValid) {
         _ctrls['deliveryid']?.clear();
       }
+      return;
+    }
+
+    // Imposto e taxas (novo) -> Empresa: não exibir empresas que já possuem cadastro.
+    if (!_isEdit && _isEmpresaTaxas && f.column == 'empresaid' && fk.table == 'empresa') {
+      final assoc = await SupabaseConfig.client.from('empresasetup').select('empresaid').limit(1000);
+      final excluded = <int>{
+        for (final row in assoc)
+          if (row['empresaid'] is num) (row['empresaid'] as num).toInt(),
+      };
+      // Mantém a empresa já selecionada (ex.: tipo E com a empresa travada) para o combo
+      // continuar válido; a duplicidade é barrada no salvamento.
+      final currentEmpresaId = int.tryParse(_ctrls['empresaid']?.text.trim() ?? '');
+      if (currentEmpresaId != null) excluded.remove(currentEmpresaId);
+
+      var query = SupabaseConfig.client.from('empresa').select(select);
+      if (excluded.isNotEmpty) {
+        query = query.not('empresaid', 'in', '(${excluded.join(',')})');
+      }
+      final rows = await query.order(fk.labelColumn, ascending: true).limit(500);
+      if (!mounted) return;
+      setState(() => _fkOptions[f.column] = List<Map<String, dynamic>>.from(rows));
       return;
     }
 
@@ -1471,7 +1501,15 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     final lockedEmpresaDeliveryFk =
         _isEdit && widget.definition.keyName == 'empresadelivery' && (f.column == 'empresaid' || f.column == 'deliveryid');
 
-    final readOnly = widget.readOnlyColumns.contains(f.column) || lockedEmpresaId || lockedEmpresaDeliveryEmpresa || lockedEmpresaDeliveryFk;
+    // Imposto e taxas: tipo E fica com a empresa logada; na edição a empresa não pode mudar
+    // (somente imposto, taxaadm e taxamotoboy são editáveis).
+    final lockedEmpresaTaxasEmpresa = _isEmpresaTaxas && f.column == 'empresaid' && (_isEdit || !session.isSuperAdmin);
+
+    final readOnly = widget.readOnlyColumns.contains(f.column) ||
+        lockedEmpresaId ||
+        lockedEmpresaDeliveryEmpresa ||
+        lockedEmpresaDeliveryFk ||
+        lockedEmpresaTaxasEmpresa;
 
     final options = _fkOptions[f.column] ?? const <Map<String, dynamic>>[];
     final isLoading = _fkLoading.contains(f.column);
@@ -1612,6 +1650,9 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
              inputFormatters = const [_PtBrDecimalFormatter(maxIntDigits: 5, decimalDigits: 2, useThousandsSeparator: true)];
            } else if (_isCompraItem && (f.column == 'quantidade' || f.column == 'valorunitario')) {
              inputFormatters = const [_PtBrDecimalFormatter(maxIntDigits: 5, decimalDigits: 2, useThousandsSeparator: true)];
+          } else if (_isEmpresaTaxas && _empresaTaxasValueColumns.contains(f.column)) {
+            // Mask: up to 9.999,99 (pt-BR) -> numeric(6,2)
+            inputFormatters = const [_PtBrDecimalFormatter(maxIntDigits: 4, decimalDigits: 2, useThousandsSeparator: true)];
           } else if (widget.definition.keyName == 'empresadelivery' && f.column == 'taxadelivery') {
             // Mask: up to 9.999,99 (pt-BR) -> numeric(6,2)
             inputFormatters = const [_PtBrDecimalFormatter(maxIntDigits: 4, decimalDigits: 2, useThousandsSeparator: true)];
@@ -2204,9 +2245,57 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
             }
           }
 
+          // Imposto e taxas: percentuais (imposto/taxa adm) devem ficar entre 0 e 100.
+          // Imposto = 100% inviabiliza o cálculo do "Valor de lista do site".
+          if (_isEmpresaTaxas && (f.column == 'imposto' || f.column == 'taxaadm')) {
+            if (parsed == null) {
+              _failSave('Valor inválido: ${f.label}');
+              return;
+            }
+            if (parsed < 0 || parsed >= 100) {
+              _failSave('O campo "${f.label}" deve estar entre 0 e 99,99.');
+              return;
+            }
+          }
+
           data[f.column] = parsed;
         } else {
           data[f.column] = raw;
+        }
+      }
+
+      // Imposto e taxas da empresa: regras de inclusão/edição.
+      if (_isEmpresaTaxas) {
+        if (_isEdit) {
+          // Na edição só imposto, taxaadm e taxamotoboy podem ser alterados.
+          data.removeWhere((k, _) => !_empresaTaxasValueColumns.contains(k));
+          for (final col in _empresaTaxasValueColumns) {
+            data.putIfAbsent(col, () => null);
+          }
+        } else {
+          if (!session.isSuperAdmin) {
+            if (empresaId == null) {
+              _failSave('Não foi possível identificar a empresa do usuário logado.');
+              return;
+            }
+            data['empresaid'] = empresaId;
+          }
+          final novaEmpresaId = data['empresaid'];
+          if (novaEmpresaId == null) {
+            _failSave('Selecione: Empresa');
+            return;
+          }
+          // Não permitir cadastrar uma empresa que já possui registro.
+          final existing = await SupabaseService.select(
+            'empresasetup',
+            select: 'empresasetupid',
+            filters: {'empresaid': novaEmpresaId},
+            limit: 1,
+          );
+          if (existing.isNotEmpty) {
+            _failSave('Esta empresa já possui imposto e taxas cadastrados. Edite o registro existente.');
+            return;
+          }
         }
       }
 
@@ -2412,6 +2501,9 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
           return;
         }
 
+        // Kits usam imposto/taxa adm do empresasetup em cache.
+        if (widget.definition.table == 'empresasetup') KitService.clearEmpresaSetupCache();
+
         if (_isEmpresa) {
           try {
             await context.read<AppSessionController>().reloadProfile();
@@ -2444,6 +2536,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
         debugPrint('GenericCadastroFormSheet: inserting into ${widget.definition.table}');
         final inserted = await SupabaseService.insert(widget.definition.table, data);
         final first = inserted.isNotEmpty ? inserted.first : null;
+        if (widget.definition.table == 'empresasetup') KitService.clearEmpresaSetupCache();
 
         if (_isEmpresa) {
           try {

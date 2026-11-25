@@ -94,14 +94,17 @@ class FkDeleteGuard {
         // If the referencing table is scoped by empresa (e.g. item.empresaid), we
         // can strengthen the check to the current empresa to avoid cross-company
         // false positives while still preventing the real breach.
-        if (empresaId != null && _isTableScopedByEmpresa(ref.referencingTable)) {
+        // Exceção: quando a própria FK é `empresaid` (ex.: excluir Empresa), não
+        // sobrescrever o filtro com a empresa logada.
+        if (empresaId != null && ref.referencingColumn != 'empresaid' && _isTableScopedByEmpresa(ref.referencingTable)) {
           filters['empresaid'] = empresaId;
         }
 
         // Existence check (limit 1) for any referencing row.
+        // OBS: PostgREST não aceita `select=1`; selecionamos a própria coluna da FK.
         final rows = await SupabaseService.select(
           ref.referencingTable,
-          select: '1',
+          select: ref.referencingColumn,
           filters: filters,
           limit: 1,
         );

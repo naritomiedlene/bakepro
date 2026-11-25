@@ -61,7 +61,7 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
   String? _contextReceitaNome;
 
   num? _empresaSetupImpostoPct;
-  int? _empresaSetupImpostoEmpresaId;
+  num? _empresaSetupTaxaMotoboyPct;
 
   final TextEditingController _receitaSearchController = TextEditingController();
   String _receitaSearchQuery = '';
@@ -947,6 +947,12 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
         filters['empresaid'] = empresaId;
       }
 
+      // Imposto e taxas da empresa: usuário tipo E deve ver somente a empresa logada.
+      // Sem empresa identificada, filtra por um id inexistente (não mostra nada) em vez de mostrar todas.
+      if (widget.definition.keyName == 'empresataxas' && !session.isSuperAdmin) {
+        filters['empresaid'] = empresaId ?? -1;
+      }
+
       if (widget.extraFilters != null) {
         filters.addAll(widget.extraFilters!);
       }
@@ -988,6 +994,9 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
         select = '*, unidade:unidadeid(unidade)';
       } else if (shouldEmbedCategoriaForProduto) {
         select = '*, categoria:categoriaid(nome)';
+      } else if (widget.definition.keyName == 'empresataxas') {
+        // Imposto e taxas: exibir o nome da empresa em vez do id.
+        select = '*, empresa:empresaid(nomefantasia)';
       } else if (shouldEmbedEmpresaDeliveryLabels) {
         // EmpresaDelivery: embed Empresa + Delivery so the list shows names (not IDs).
         // Note: uses explicit aliases to keep payload small.
@@ -1024,10 +1033,10 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       Future<double?>? totalDespesaVariavelFuture;
       Future<double?>? totalDespesaFixaFuture;
       Future<double?>? totalCategoriaRateioFuture;
-      Future<num?>? impostoPctFuture;
+      Future<Map<String, dynamic>?>? impostoPctFuture;
       if (empresaId != null) {
         if (widget.definition.keyName == 'kit') {
-          impostoPctFuture = _loadEmpresaSetupImpostoPct(empresaId);
+          impostoPctFuture = _loadEmpresaSetupKitHeader(empresaId);
         }
         if (widget.definition.keyName == 'despesavariavel') {
           totalDespesaVariavelFuture = _loadTotalDespesaVariavelAndMaybeSync(empresaId);
@@ -1058,9 +1067,9 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
 
       if (impostoPctFuture != null) {
         final idx = receitaFuture != null ? 1 : 0;
-        final v = results[idx];
-        _empresaSetupImpostoPct = v is num ? v : num.tryParse(v?.toString() ?? '');
-        _empresaSetupImpostoEmpresaId = empresaId;
+        final setup = results[idx] as Map<String, dynamic>?;
+        _empresaSetupImpostoPct = parsePtBrNumber(setup?['imposto']);
+        _empresaSetupTaxaMotoboyPct = parsePtBrNumber(setup?['taxamotoboy']);
       }
 
       final offsetImposto = impostoPctFuture != null ? 1 : 0;
@@ -1282,17 +1291,12 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
     }
   }
 
-  Future<num?> _loadEmpresaSetupImpostoPct(int empresaId) async {
+  /// Imposto e taxa motoboy (empresasetup) da empresa logada, exibidos no cabeçalho da lista de kits.
+  Future<Map<String, dynamic>?> _loadEmpresaSetupKitHeader(int empresaId) async {
     try {
-      // Lightweight in-memory cache for this page lifecycle.
-      if (_empresaSetupImpostoEmpresaId == empresaId && _empresaSetupImpostoPct != null) return _empresaSetupImpostoPct;
-      final row = await SupabaseService.selectSingle('empresasetup', select: 'imposto', filters: {'empresaid': empresaId});
-      if (row == null) return null;
-      final raw = row['imposto'];
-      if (raw is num) return raw;
-      return num.tryParse(raw?.toString() ?? '');
+      return await SupabaseService.selectSingle('empresasetup', select: 'imposto,taxamotoboy', filters: {'empresaid': empresaId});
     } catch (e) {
-      debugPrint('Load empresasetup (imposto) failed: $e');
+      debugPrint('Load empresasetup (imposto/taxamotoboy) failed: $e');
       return null;
     }
   }
@@ -1544,6 +1548,28 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       return;
     }
 
+    // Imposto e taxas da empresa: só permite excluir se a empresa do registro não
+    // estiver referenciada em nenhuma outra tabela (bloqueia também se a checagem falhar).
+    if (widget.definition.keyName == 'empresataxas') {
+      final empresaIdRaw = row['empresaid'];
+      final empresaIdDoRegistro = empresaIdRaw is num ? empresaIdRaw.toInt() : int.tryParse(empresaIdRaw?.toString() ?? '');
+      var podeExcluir = false;
+      if (empresaIdDoRegistro != null) {
+        try {
+          podeExcluir = !await _isEmpresaReferencedElsewhere(empresaIdDoRegistro, ignoreTable: widget.definition.table);
+        } catch (e) {
+          debugPrint('Failed to check empresa references before deleting empresasetup: $e');
+        }
+      }
+      if (!podeExcluir) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('O registro não pode ser excluído, pois está associado a outras informações.')),
+        );
+        return;
+      }
+    }
+
     // Business rule: do not allow deleting Empresa/Delivery if associated in empresadelivery.
     // (We also expect the DB to have FKs that prevent deletion, but this gives a nicer UX.)
     if (widget.definition.keyName == 'empresa' || widget.definition.keyName == 'delivery') {
@@ -1679,7 +1705,13 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                 '')
             .toString()
             .trim();
-    final identifier = rawIdentifier.isNotEmpty ? rawIdentifier : '#$id';
+    // Imposto e taxas: identificar pelo nome da empresa (vem do join empresa:empresaid).
+    final empresaJoin = row['empresa'];
+    final empresaTaxasNome =
+        widget.definition.keyName == 'empresataxas' && empresaJoin is Map ? empresaJoin['nomefantasia']?.toString().trim() : null;
+    final identifier = (empresaTaxasNome != null && empresaTaxasNome.isNotEmpty)
+        ? empresaTaxasNome
+        : (rawIdentifier.isNotEmpty ? rawIdentifier : '#$id');
 
     final ok = await showModalBottomSheet<bool>(
       context: context,
@@ -1705,6 +1737,8 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       } else {
         await SupabaseService.delete(widget.definition.table, filters: {widget.definition.idColumn: id});
       }
+      // Kits usam imposto/taxa adm do empresasetup em cache.
+      if (widget.definition.table == 'empresasetup') KitService.clearEmpresaSetupCache();
       if (!mounted) return;
       // Padrão adotado nos outros cadastros: após excluir, apenas recarrega a lista
       // (sem exibir SnackBar de sucesso, para evitar “poluição” visual).
@@ -1733,6 +1767,26 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
 
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Não foi possível excluir.')));
     }
+  }
+
+  /// Verifica se a empresa é referenciada (coluna `empresaid`) em alguma tabela
+  /// cadastrada nas definições, exceto [ignoreTable].
+  Future<bool> _isEmpresaReferencedElsewhere(int empresaId, {required String ignoreTable}) async {
+    final tables = <String>{
+      for (final def in Cadastros.all)
+        if (def.table != ignoreTable &&
+            def.table != 'empresa' &&
+            (def.scopedByEmpresa || def.fields.any((f) => f.column == 'empresaid')))
+          def.table,
+    };
+    for (final table in tables) {
+      final rows = await SupabaseService.select(table, select: 'empresaid', filters: {'empresaid': empresaId}, limit: 1);
+      if (rows.isNotEmpty) {
+        debugPrint('Empresa $empresaId referenciada em $table');
+        return true;
+      }
+    }
+    return false;
   }
 
   Future<bool> _hasEmpresaDeliveryAssociation({dynamic empresaId, dynamic deliveryId}) async {
@@ -1878,18 +1932,28 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                       ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.percent_rounded, size: 16, color: cs.primary),
-                            const SizedBox(width: 6),
-                            Text(
-                              "Imposto: ${_formatPtBrNumber(_empresaSetupImpostoPct) ?? '—'}%",
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
-                            ),
-                          ],
+                        child: Text(
+                          "Imposto: ${_formatPtBrNumber(_empresaSetupImpostoPct) ?? '—'}%",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
+                        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        child: Text(
+                          "Taxa motoboy: ${_empresaSetupTaxaMotoboyPct == null ? '—' : formatPtBrMoney(_empresaSetupTaxaMotoboyPct!, decimalDigits: 2)}%",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
                         ),
                       ),
                     ),
@@ -2175,6 +2239,8 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                                 return _RowCard(
                                   definition: widget.definition,
                                   row: row,
+                                  kitImpostoPct: _empresaSetupImpostoPct,
+                                  kitTaxaMotoboyPct: _empresaSetupTaxaMotoboyPct,
                                   onEdit: () => _openEdit(row),
                                   onDelete: () => _delete(row),
                                   onRefreshRequested: _load,
@@ -3111,9 +3177,13 @@ class _ReceitaInlineCostsRow extends StatelessWidget {
 }
 
 class _KitInlineInfoRow extends StatefulWidget {
-  const _KitInlineInfoRow({required this.row});
+  const _KitInlineInfoRow({required this.row, this.impostoPct, this.taxaMotoboyPct});
 
   final Map<String, dynamic> row;
+
+  /// Valores exibidos no topo da lista de kits (cards Imposto e Taxa motoboy).
+  final num? impostoPct;
+  final num? taxaMotoboyPct;
 
   @override
   State<_KitInlineInfoRow> createState() => _KitInlineInfoRowState();
@@ -3144,7 +3214,9 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
     }
     // Keep totals loading independent from the list fetch. This avoids needing
     // extra columns in `kit` and keeps the UI consistent with the edit screen.
-    _future = KitService().loadTotals(id.toInt()).then((v) => v).catchError((_) => null);
+    final empresaRaw = widget.row['empresaid'];
+    final empresaId = empresaRaw is num ? empresaRaw.toInt() : context.read<AppSessionController>().empresaId;
+    _future = KitService().loadTotals(id.toInt(), empresaId: empresaId).then((v) => v).catchError((_) => null);
   }
 
   @override
@@ -3210,18 +3282,14 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
             );
           }
 
-          final prod = totals?.totalProdutos;
-          final emb = totals?.totalEmbalagens;
-          final tot = totals?.totalKit;
-          if (prod == null && emb == null && tot == null) return const SizedBox.shrink();
-
-          String? money(num? v) => v == null ? null : formatPtBrCurrency(v);
-          final prodTxt = money(prod);
-          final embTxt = money(emb);
-          final totTxt = money(tot);
-
-          Widget pill({required IconData icon, required String label, required String value, bool emphasize = false}) =>
-              _InlineInfoPill(icon: icon, label: label, value: value, colorScheme: cs, emphasize: emphasize);
+          final prod = totals?.totalKitComTaxa;
+          // O I.R. não é mais exibido por kit (só entra no cálculo do valor de lista do site).
+          if (prod == null) return const SizedBox.shrink();
+          // Valor de lista do site = valor total do kit / (1 - imposto/100 - taxa motoboy/100),
+          // usando os percentuais exibidos no topo da lista.
+          final imposto = widget.impostoPct;
+          final divisor = imposto == null ? null : 1 - imposto / 100 - (widget.taxaMotoboyPct ?? 0) / 100;
+          final valorListaSite = (divisor != null && divisor > 0) ? prod / divisor : null;
 
           return Container(
             decoration: BoxDecoration(
@@ -3236,11 +3304,21 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (prodTxt != null) pill(icon: Icons.shopping_bag_rounded, label: 'Prod', value: prodTxt),
-                    if (prodTxt != null && (embTxt != null || totTxt != null)) const SizedBox(width: AppSpacing.sm),
-                    if (embTxt != null) pill(icon: Icons.inventory_2_rounded, label: 'Emb', value: embTxt),
-                    if (embTxt != null && totTxt != null) const SizedBox(width: AppSpacing.sm),
-                    if (totTxt != null) pill(icon: Icons.receipt_long_rounded, label: 'Tot', value: totTxt, emphasize: true),
+                    _InlineInfoPill(
+                      icon: Icons.shopping_bag_rounded,
+                      label: 'Valor total do kit - R\$',
+                      value: formatPtBrCurrency(prod),
+                      colorScheme: cs,
+                    ),
+                    if (valorListaSite != null) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      _InlineInfoPill(
+                        icon: Icons.storefront_rounded,
+                        label: 'Valor de lista do site - R\$',
+                        value: formatPtBrCurrency(valorListaSite),
+                        colorScheme: cs,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -3263,9 +3341,9 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
 }
 
 class _InlineInfoPill extends StatelessWidget {
-  const _InlineInfoPill({required this.icon, required this.label, required this.value, required this.colorScheme, this.emphasize = false});
+  const _InlineInfoPill({this.icon, required this.label, required this.value, required this.colorScheme, this.emphasize = false});
 
-  final IconData icon;
+  final IconData? icon;
   final String label;
   final String value;
   final ColorScheme colorScheme;
@@ -3286,8 +3364,10 @@ class _InlineInfoPill extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: fg),
-            const SizedBox(width: 8),
+            if (icon != null) ...[
+              Icon(icon, size: 16, color: fg),
+              const SizedBox(width: 8),
+            ],
             Text(
               '$label: ',
               maxLines: 1,
@@ -3308,10 +3388,22 @@ class _InlineInfoPill extends StatelessWidget {
 }
 
 class _RowCard extends StatelessWidget {
-  const _RowCard({required this.definition, required this.row, required this.onEdit, required this.onDelete, this.onRefreshRequested});
+  const _RowCard({
+    required this.definition,
+    required this.row,
+    required this.onEdit,
+    required this.onDelete,
+    this.onRefreshRequested,
+    this.kitImpostoPct,
+    this.kitTaxaMotoboyPct,
+  });
 
   final CadastroDefinition definition;
   final Map<String, dynamic> row;
+
+  /// Kit: imposto e taxa motoboy exibidos no topo da lista (empresa logada).
+  final num? kitImpostoPct;
+  final num? kitTaxaMotoboyPct;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback? onRefreshRequested;
@@ -3614,7 +3706,7 @@ class _RowCard extends StatelessWidget {
                   else if (isReceita)
                     _ReceitaInlineCostsRow(row: row)
                   else if (isKit)
-                    _KitInlineInfoRow(row: row)
+                    _KitInlineInfoRow(row: row, impostoPct: kitImpostoPct, taxaMotoboyPct: kitTaxaMotoboyPct)
                   else if (subtitleText != null && subtitleText.isNotEmpty)
                     Text(subtitleText, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.25))
                   else if (lines.isNotEmpty)
@@ -3656,6 +3748,12 @@ class _RowCard extends StatelessWidget {
   }
 
   String _titleText(CadastroDefinition def, Map<String, dynamic> row) {
+    if (def.keyName == 'empresataxas') {
+      final empresaNome = _relatedStringField(row['empresa'], 'nomefantasia');
+      if (empresaNome != null && empresaNome.isNotEmpty) return empresaNome;
+      final empresaId = row['empresaid'];
+      return empresaId != null ? 'Empresa #$empresaId' : 'Empresa';
+    }
     if (def.keyName == 'empresadelivery') {
       final empresaNome = _relatedStringField(row['empresa'], 'nomefantasia');
       final deliveryNome = _relatedStringField(row['delivery'], 'nome');
@@ -3757,6 +3855,17 @@ class _RowCard extends StatelessWidget {
   }
 
   String? _subtitleText(CadastroDefinition def, Map<String, dynamic> row) {
+    if (def.keyName == 'empresataxas') {
+      final imposto = _formatPtBrCurrencyWithThousands(row['imposto']);
+      final taxaAdm = _formatPtBrCurrencyWithThousands(row['taxaadm']);
+      final taxaMotoboy = _formatPtBrCurrencyWithThousands(row['taxamotoboy']);
+      final bits = <String>[
+        if (imposto != null) 'I.R.: $imposto%',
+        if (taxaAdm != null) 'Taxa adm: $taxaAdm%',
+        if (taxaMotoboy != null) 'Taxa motoboy: $taxaMotoboy',
+      ];
+      return bits.isEmpty ? null : bits.join(' • ');
+    }
     if (def.keyName == 'empresadelivery') {
       final taxa = _formatPtBrCurrencyWithThousands(row['taxadelivery']);
       final status = row['status'];

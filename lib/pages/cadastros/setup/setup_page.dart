@@ -1,4 +1,5 @@
 import 'package:bakepro/pages/cadastros/cadastro_definitions.dart';
+import 'package:bakepro/services/kit_service.dart';
 import 'package:bakepro/services/state/app_session_controller.dart';
 import 'package:bakepro/supabase/supabase_config.dart';
 import 'package:bakepro/theme.dart';
@@ -161,6 +162,7 @@ class _SetupPageState extends State<SetupPage> {
           if (updated.isNotEmpty) _row = updated.first;
         }
       }
+      KitService.clearEmpresaSetupCache();
 
       if (!mounted) return;
     } catch (e) {

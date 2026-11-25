@@ -367,6 +367,30 @@ class Cadastros {
         ),
       ],
     ),
+    // Imposto e taxas por empresa (tabela `empresasetup`, um registro por empresa).
+    // OBS: acesso no router/menu para tipos A e E; tipo E só vê/edita a própria empresa.
+    CadastroDefinition(
+      keyName: 'empresataxas',
+      title: 'Imposto e taxas da empresa',
+      table: 'empresasetup',
+      idColumn: 'empresasetupid',
+      // Admin geral (A) gerencia várias empresas; o filtro por empresa para tipo E é aplicado na lista.
+      scopedByEmpresa: false,
+      visibleInMenu: true,
+      displayColumns: ['empresaid', 'imposto', 'taxaadm', 'taxamotoboy'],
+      fields: [
+        CadastroField(
+          column: 'empresaid',
+          label: 'Empresa',
+          type: CadastroFieldType.number,
+          required: true,
+          fk: CadastroForeignKey(table: 'empresa', idColumn: 'empresaid', labelColumn: 'nomefantasia', scopedByEmpresa: false),
+        ),
+        CadastroField(column: 'imposto', label: 'Imposto de renda (%)', type: CadastroFieldType.number, required: true),
+        CadastroField(column: 'taxaadm', label: 'Taxa administrativa (%)', type: CadastroFieldType.number, required: true),
+        CadastroField(column: 'taxamotoboy', label: 'Taxa motoboy', type: CadastroFieldType.number),
+      ],
+    ),
     CadastroDefinition(
       keyName: 'item',
       title: 'Item',
@@ -709,6 +733,7 @@ class Cadastros {
     'fornecedor': Icons.local_shipping_rounded,
     'delivery': Icons.delivery_dining_rounded,
     'empresadelivery': Icons.handshake_rounded,
+    'empresataxas': Icons.request_quote_rounded,
   };
 
   static CadastroDefinition? byKey(String key) {

@@ -44,6 +44,13 @@ class CadastroRouterPage extends StatelessWidget {
       return const _UnauthorizedCadastro();
     }
 
+    // Imposto e taxas da empresa:
+    // - Administrador geral (A): vê todas as empresas
+    // - Admin da empresa (E): vê somente a empresa logada (filtro aplicado na lista)
+    if (def.keyName == 'empresataxas' && !context.watch<AppSessionController>().isAdminEmpresa) {
+      return const _UnauthorizedCadastro();
+    }
+
     return GenericCadastroListPage(definition: def, openCreateOnLoad: openForm);
   }
 }
@@ -111,6 +118,7 @@ class CadastroOperacionalIndexPage extends StatelessWidget {
       'despesavariavel',
       'categoria',
       'delivery',
+      'empresataxas',
       'setup',
     ];
     // Opção 1: “Produto com Receita” (produto) deve aparecer depois de Receita.
@@ -205,6 +213,7 @@ class _CadastrosIndex extends StatelessWidget {
       'categoria',
       'delivery',
       'empresadelivery',
+      'empresataxas',
       'setup',
     ];
     // Extra safety: some entities are internal/nested and should never be shown here.
@@ -219,6 +228,7 @@ class _CadastrosIndex extends StatelessWidget {
         .where((d) => d.keyName != 'empresa' || session.isAdminEmpresa)
         .where((d) => d.keyName != 'delivery' || session.isSuperAdmin)
         .where((d) => d.keyName != 'empresadelivery' || session.isAdminEmpresa)
+        .where((d) => d.keyName != 'empresataxas' || session.isAdminEmpresa)
         .toList(growable: false)
       ..sort((a, b) => basicCadastros.indexOf(a.keyName).compareTo(basicCadastros.indexOf(b.keyName)));
     return SafeArea(
