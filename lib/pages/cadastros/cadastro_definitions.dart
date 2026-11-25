@@ -563,7 +563,37 @@ class Cadastros {
       fields: [
         CadastroField(column: 'nome', label: 'Nome', type: CadastroFieldType.text, required: true),
         CadastroField(column: 'descricao', label: 'Descrição', type: CadastroFieldType.text, required: true),
+        // Opcional: kits antigos não têm classificação.
+        CadastroField(
+          column: 'classificacaokitid',
+          label: 'Classificação',
+          type: CadastroFieldType.number,
+          fk: CadastroForeignKey(table: 'classificacaokit', idColumn: 'classificacaokitid', labelColumn: 'nome', scopedByEmpresa: true),
+        ),
         CadastroField(column: 'status', label: 'Status (A/I)', type: CadastroFieldType.text, required: true),
+      ],
+    ),
+
+    // Classificações de kit (várias por empresa, sempre da empresa logada).
+    CadastroDefinition(
+      keyName: 'classificacaokit',
+      title: 'Classificação de Kit',
+      table: 'classificacaokit',
+      idColumn: 'classificacaokitid',
+      scopedByEmpresa: true,
+      displayColumns: ['nome', 'status'],
+      fields: [
+        CadastroField(column: 'nome', label: 'Nome', type: CadastroFieldType.text, required: true),
+        CadastroField(
+          column: 'status',
+          label: 'Status',
+          type: CadastroFieldType.option,
+          required: true,
+          options: [
+            CadastroOption(value: 'A', label: 'Ativo'),
+            CadastroOption(value: 'I', label: 'Inativo'),
+          ],
+        ),
       ],
     ),
 
@@ -726,6 +756,7 @@ class Cadastros {
     'categoria': Icons.category_outlined,
     'produto': Icons.local_offer_rounded,
     'kit': Icons.card_giftcard_rounded,
+    'classificacaokit': Icons.label_rounded,
     'produtoreceita': Icons.link_rounded,
     'receita': Icons.receipt_long_rounded,
     'material': Icons.all_inbox_rounded,

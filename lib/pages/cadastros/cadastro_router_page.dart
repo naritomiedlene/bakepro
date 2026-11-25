@@ -127,6 +127,7 @@ class CadastroOperacionalIndexPage extends StatelessWidget {
       'receita',
       'produto',
       'kit',
+      'classificacaokit',
     ];
 
     final allVisibleCadastros = Cadastros.all
@@ -138,6 +139,8 @@ class CadastroOperacionalIndexPage extends StatelessWidget {
         .where((d) => !basicCadastros.contains(d.keyName))
         .where((d) => d.keyName != 'usuario' || session.isAdminEmpresa)
         .where((d) => d.keyName != 'empresa' || session.isAdminEmpresa)
+        // Delivery da Empresa: somente administradores (A/E), igual à regra da rota.
+        .where((d) => d.keyName != 'empresadelivery' || session.isAdminEmpresa)
         .toList(growable: false)
       ..sort((a, b) {
         final ia = operationalCadastrosOrder.indexOf(a.keyName);
@@ -212,7 +215,7 @@ class _CadastrosIndex extends StatelessWidget {
       'despesavariavel',
       'categoria',
       'delivery',
-      'empresadelivery',
+      // 'empresadelivery' fica somente em Cadastro operacional.
       'empresataxas',
       'setup',
     ];
@@ -227,7 +230,6 @@ class _CadastrosIndex extends StatelessWidget {
         .where((d) => d.keyName != 'usuario' || session.isAdminEmpresa)
         .where((d) => d.keyName != 'empresa' || session.isAdminEmpresa)
         .where((d) => d.keyName != 'delivery' || session.isSuperAdmin)
-        .where((d) => d.keyName != 'empresadelivery' || session.isAdminEmpresa)
         .where((d) => d.keyName != 'empresataxas' || session.isAdminEmpresa)
         .toList(growable: false)
       ..sort((a, b) => basicCadastros.indexOf(a.keyName).compareTo(basicCadastros.indexOf(b.keyName)));

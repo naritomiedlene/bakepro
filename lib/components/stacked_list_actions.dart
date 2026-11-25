@@ -13,7 +13,11 @@ class StackedListActions extends StatelessWidget {
     this.onCreate,
     this.refreshLabel = 'Atualizar',
     this.createLabel = 'Novo',
+    this.leadingActions = const [],
   });
+
+  /// Botões extras exibidos antes de "Atualizar" (ex.: PDF na lista de kits).
+  final List<Widget> leadingActions;
 
   final bool isLoading;
   final VoidCallback onRefresh;
@@ -52,6 +56,7 @@ class StackedListActions extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                for (final a in leadingActions) ...[a, const SizedBox(height: AppSpacing.xs)],
                 refreshButton,
                 if (createButton != null) ...[const SizedBox(height: AppSpacing.xs), createButton],
               ],
@@ -65,6 +70,7 @@ class StackedListActions extends StatelessWidget {
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.xs,
           children: [
+            ...leadingActions,
             ConstrainedBox(constraints: const BoxConstraints(minWidth: 140), child: refreshButton),
             if (createButton != null) ConstrainedBox(constraints: const BoxConstraints(minWidth: 140), child: createButton),
           ],

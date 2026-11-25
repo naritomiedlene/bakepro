@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
+import 'package:bakepro/components/pdf_preview_dialog.dart';
 import 'package:bakepro/nav.dart';
+import 'package:bakepro/services/relatorios/precificacao_pdf_report.dart';
 import 'package:bakepro/supabase/supabase_config.dart';
 import 'package:bakepro/theme.dart';
 import 'package:bakepro/utils/number_parsing.dart';
@@ -19,6 +21,7 @@ class PrecificacaoProdutosPage extends StatefulWidget {
 }
 
 class _PrecificacaoProdutosPageState extends State<PrecificacaoProdutosPage> {
+  // null = TODOS (todas as categorias).
   int? _categoriaId;
   bool _loadingCategorias = true;
   bool _loadingList = true;
@@ -254,6 +257,48 @@ class _PrecificacaoProdutosPageState extends State<PrecificacaoProdutosPage> {
     }
   }
 
+  /// Gera o PDF com os produtos visíveis (filtros de categoria e nome aplicados).
+  Future<void> _openPdf(List<_ProdutoPrecificacaoRow> rows) async {
+    final session = context.read<AppSessionController>();
+    final categoriaId = _categoriaId;
+    final filtroCategoria = categoriaId == null
+        ? 'TODOS'
+        : (_categorias.where((c) => c.id == categoriaId).map((c) => c.nome).firstOrNull ?? '#$categoriaId');
+    final filtroNome = _nomeFilter.trim();
+    final empresa = session.empresaLabel;
+    final linhas = [
+      for (final r in rows)
+        () {
+          final base = r.custoUnitario + r.despesaFixaPorUnidade + r.despesaVariavelPorUnidade;
+          return PrecificacaoPdfLinha(
+            codigo: (r.codigo.isNotEmpty ? r.codigo : '#${r.produtoId}').toUpperCase(),
+            nome: r.nome,
+            categoria: r.categoriaNome,
+            margemLucroPct: r.percentualLucro,
+            custoUnitario: r.custoUnitario,
+            despesaFixaUn: r.despesaFixaPorUnidade,
+            despesaVariavelUn: r.despesaVariavelPorUnidade,
+            precoCalculado: base * ((r.percentualLucro / 100.0) + 1.0),
+            precoDefinido: r.valorVendaDefinido,
+            lucroAtualPct: (r.valorVendaDefinido == null || base == 0) ? null : ((r.valorVendaDefinido! / base) - 1.0) * 100.0,
+            precoAtualizadoEm: r.dataAtualizacaoValorVenda,
+          );
+        }(),
+    ];
+    await showPdfPreviewDialog(
+      context,
+      titulo: 'Relatório de precificação',
+      arquivo: 'precificacao',
+      build: (format) => PrecificacaoPdfReport.build(
+        format: format,
+        empresa: empresa,
+        filtroCategoria: filtroCategoria,
+        filtroNome: filtroNome,
+        linhas: linhas,
+      ),
+    );
+  }
+
   Future<Map<int, double>> _computeCustoProducao(List<int> produtoIds) async {
     if (produtoIds.isEmpty) return const {};
     try {
@@ -406,16 +451,14 @@ class _PrecificacaoProdutosPageState extends State<PrecificacaoProdutosPage> {
     final preferHorizontalPaging = isHandheldPlatform || isNarrowScreen;
 
     final String nomeFilter = _nomeFilter.trim().toLowerCase();
-    final visibleRows = _categoriaId == null
-        ? const <_ProdutoPrecificacaoRow>[]
-        : _rows
-            .where((r) {
-              if (r.categoriaId != _categoriaId) return false;
-              if (nomeFilter.isEmpty) return true;
-              return r.nome.toLowerCase().contains(nomeFilter);
-            })
-            .toList(growable: false);
-    final countLabel = _categoriaId == null
+    final visibleRows = _rows
+        .where((r) {
+          if (_categoriaId != null && r.categoriaId != _categoriaId) return false;
+          if (nomeFilter.isEmpty) return true;
+          return r.nome.toLowerCase().contains(nomeFilter);
+        })
+        .toList(growable: false);
+    final countLabel = _loadingList
         ? null
         : visibleRows.length == 1
             ? '1 item filtrado'
@@ -447,6 +490,12 @@ class _PrecificacaoProdutosPageState extends State<PrecificacaoProdutosPage> {
                           tooltip: 'Voltar para Listas',
                         ),
                         const Spacer(),
+                        OutlinedButton.icon(
+                          onPressed: (_loadingCategorias || _loadingList || _error != null) ? null : () => _openPdf(visibleRows),
+                          icon: Icon(Icons.picture_as_pdf_rounded, color: cs.primary),
+                          label: Text('PDF', style: TextStyle(color: cs.primary)),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
                         IconButton(
                           onPressed: (_loadingCategorias || _loadingList) ? null : _load,
                           icon: const Icon(Icons.refresh_rounded),
@@ -530,19 +579,13 @@ class _PrecificacaoProdutosPageState extends State<PrecificacaoProdutosPage> {
                     ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
                     : _error != null
                         ? _ErrorState(message: _error!, onRetry: _load)
-                        : _categoriaId == null
-                            ? const _EmptyState(
-                                icon: Icons.filter_alt_outlined,
-                                title: 'Selecione uma categoria',
-                                message: 'Escolha uma categoria no filtro acima para exibir os produtos.',
-                              )
-                            : visibleRows.isEmpty
+                        : visibleRows.isEmpty
                                 ? const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 32, horizontal: 16),
                                     child: _EmptyState(
                                       icon: Icons.inventory_2_outlined,
                                       title: 'Nenhum produto encontrado',
-                                      message: 'Não há produtos ativos para a categoria selecionada.',
+                                      message: 'Não há produtos ativos para o filtro selecionado.',
                                     ),
                                   )
                                 : LayoutBuilder(
@@ -753,12 +796,12 @@ class _CategoriaFilter extends StatelessWidget {
       isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'Categoria do produto',
-        hintText: 'Selecione uma categoria',
         prefixIcon: Icon(Icons.filter_alt_outlined),
       ),
       items: [
         if (loading) const DropdownMenuItem<int?>(value: null, enabled: false, child: Text('Carregando categorias...')),
-        if (!loading) const DropdownMenuItem<int?>(value: null, enabled: false, child: Text('Selecione...')),
+        // TODOS = todas as categorias (padrão).
+        if (!loading) const DropdownMenuItem<int?>(value: null, child: Text('TODOS')),
         if (!loading) ...categorias.map((c) => DropdownMenuItem<int?>(value: c.id, child: Text(c.nome))),
       ],
     );
@@ -911,19 +954,34 @@ class _ProdutoPrecificacaoHeader extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: InkWell(
-                      onTap: onEditPrecoVenda,
-                      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-                      child: Text(
-                        row.nome,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          height: 1.1,
-                          color: cs.primary,
-                          decoration: TextDecoration.underline,
-                          decorationColor: cs.primary.withValues(alpha: 0.35),
+                    child: Wrap(
+                      spacing: 10,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        InkWell(
+                          onTap: onEditPrecoVenda,
+                          overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+                          child: Text(
+                            row.nome,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              height: 1.1,
+                              color: cs.primary,
+                              decoration: TextDecoration.underline,
+                              decorationColor: cs.primary.withValues(alpha: 0.35),
+                            ),
+                          ),
                         ),
-                      ),
+                        // Card "Categoria" em verde (mesmo padrão da classificação na lista de kits).
+                        if (hasCategoria)
+                          _Pill(
+                            text: 'Categoria: ${row.categoriaNome}',
+                            background: Colors.green.shade700,
+                            foreground: Colors.white,
+                            dense: true,
+                          ),
+                      ],
                     ),
                   ),
                   if (positionText.isNotEmpty) ...[
@@ -965,7 +1023,6 @@ class _ProdutoPrecificacaoHeader extends StatelessWidget {
                 spacing: 8,
                 children: [
                   _Pill(text: code, background: pillBackground, foreground: pillForeground, dense: true),
-                  if (hasCategoria) _Pill(text: row.categoriaNome, background: pillBackground, foreground: pillForeground, dense: true),
                   if (hasCategoria) _Pill(text: producaoLabel, background: pillBackground, foreground: pillForeground, dense: true),
                   if (hasCategoria) _Pill(text: rateioLabel, background: pillBackground, foreground: pillForeground, dense: true),
                   if (hasCategoria) _Pill(text: lucroLabel, background: pillBackground, foreground: pillForeground, dense: true),

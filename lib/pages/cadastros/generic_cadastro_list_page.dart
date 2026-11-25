@@ -2,6 +2,10 @@ import 'package:bakepro/pages/cadastros/cadastro_definitions.dart';
 import 'package:bakepro/pages/cadastros/generic_cadastro_form_sheet.dart';
 import 'package:bakepro/services/receita_service.dart';
 import 'package:bakepro/services/kit_service.dart';
+import 'package:bakepro/services/relatorios/item_pdf_report.dart';
+import 'package:bakepro/services/relatorios/kit_pdf_report.dart';
+import 'package:pdf/pdf.dart' show PdfPageFormat;
+import 'package:bakepro/components/pdf_preview_dialog.dart';
 import 'package:bakepro/services/totaldespesas_service.dart';
 import 'package:bakepro/services/fk_delete_guard.dart';
 import 'package:bakepro/services/state/app_session_controller.dart';
@@ -62,6 +66,14 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
 
   num? _empresaSetupImpostoPct;
   num? _empresaSetupTaxaMotoboyPct;
+  // Kit: deliveries ativos (empresadelivery.status = 'A') da empresa logada.
+  List<_KitDelivery> _kitDeliveries = const [];
+  // Controlador compartilhado entre o Scrollbar e a lista (no navegador o Scrollbar
+  // não encontra a lista sozinho e gera erros no console).
+  final ScrollController _listScrollController = ScrollController();
+  // Kit: classificações da empresa logada (filtro da lista) e filtro selecionado (null = TODOS).
+  List<Map<String, dynamic>> _kitClassificacoes = const [];
+  int? _kitClassificacaoFiltroId;
 
   final TextEditingController _receitaSearchController = TextEditingController();
   String _receitaSearchQuery = '';
@@ -71,6 +83,9 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
 
   final TextEditingController _itemSearchController = TextEditingController();
   String _itemSearchQuery = '';
+  // Item: tipos (tabela tipoitem) para o filtro e tipo selecionado (null = TODOS).
+  List<Map<String, dynamic>> _itemTipos = const [];
+  int? _itemTipoFiltroId;
 
   // Produto list: computed from produtoreceita + receita (same formula used in ProdutoCascadePage).
   // Stored directly in each row as "_custo_producao".
@@ -141,6 +156,7 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       ..sort((a, b) => (groupLabels[a] ?? '').toLowerCase().compareTo((groupLabels[b] ?? '').toLowerCase()));
 
     return ListView.separated(
+      controller: _listScrollController,
       itemCount: orderedKeys.length,
       separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
       itemBuilder: (context, idx) {
@@ -769,6 +785,7 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
 
   @override
   void dispose() {
+    _listScrollController.dispose();
     appRouteObserver.unsubscribe(this);
     _receitaSearchController.removeListener(_onReceitaSearchChanged);
     _receitaSearchController.dispose();
@@ -897,14 +914,17 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
     }
 
     final q = _itemSearchQuery.trim().toLowerCase();
-    if (q.isEmpty) {
+    final tipoId = _itemTipoFiltroId;
+    if (q.isEmpty && tipoId == null) {
       _itemFilteredRows = _rows;
       return;
     }
 
     bool matches(Map<String, dynamic> row) {
       final nome = row['nome']?.toString().trim().toLowerCase() ?? '';
-      return nome.contains(q);
+      if (q.isNotEmpty && !nome.contains(q)) return false;
+      if (tipoId != null && (row['tipoitemid'] as num?)?.toInt() != tipoId) return false;
+      return true;
     }
 
     _itemFilteredRows = _rows.where(matches).toList(growable: false);
@@ -945,6 +965,11 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       // Delivery da Empresa: usuário tipo E deve ver somente a empresa logada.
       if (widget.definition.keyName == 'empresadelivery' && empresaId != null && !session.isSuperAdmin) {
         filters['empresaid'] = empresaId;
+      }
+
+      // Classificação de Kit: sempre somente da empresa logada (inclusive para o tipo A).
+      if (widget.definition.keyName == 'classificacaokit') {
+        filters['empresaid'] = empresaId ?? -1;
       }
 
       // Imposto e taxas da empresa: usuário tipo E deve ver somente a empresa logada.
@@ -994,6 +1019,9 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
         select = '*, unidade:unidadeid(unidade)';
       } else if (shouldEmbedCategoriaForProduto) {
         select = '*, categoria:categoriaid(nome)';
+      } else if (widget.definition.keyName == 'kit') {
+        // Kit: nome da classificação (classificacaokit.nome) para o card ao lado do nome.
+        select = '*, classificacao:classificacaokitid(nome)';
       } else if (widget.definition.keyName == 'empresataxas') {
         // Imposto e taxas: exibir o nome da empresa em vez do id.
         select = '*, empresa:empresaid(nomefantasia)';
@@ -1034,9 +1062,13 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       Future<double?>? totalDespesaFixaFuture;
       Future<double?>? totalCategoriaRateioFuture;
       Future<Map<String, dynamic>?>? impostoPctFuture;
+      Future<List<_KitDelivery>>? kitDeliveriesFuture;
+      Future<List<Map<String, dynamic>>>? kitClassificacoesFuture;
       if (empresaId != null) {
         if (widget.definition.keyName == 'kit') {
           impostoPctFuture = _loadEmpresaSetupKitHeader(empresaId);
+          kitDeliveriesFuture = _loadKitDeliveries(empresaId);
+          kitClassificacoesFuture = _loadKitClassificacoes(empresaId);
         }
         if (widget.definition.keyName == 'despesavariavel') {
           totalDespesaVariavelFuture = _loadTotalDespesaVariavelAndMaybeSync(empresaId);
@@ -1070,6 +1102,24 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
         final setup = results[idx] as Map<String, dynamic>?;
         _empresaSetupImpostoPct = parsePtBrNumber(setup?['imposto']);
         _empresaSetupTaxaMotoboyPct = parsePtBrNumber(setup?['taxamotoboy']);
+      }
+      if (kitDeliveriesFuture != null) {
+        _kitDeliveries = await kitDeliveriesFuture;
+      }
+      if (widget.definition.keyName == 'item') {
+        _itemTipos = await _loadItemTipos();
+        if (_itemTipoFiltroId != null &&
+            !_itemTipos.any((t) => (t['tipoitemid'] as num?)?.toInt() == _itemTipoFiltroId)) {
+          _itemTipoFiltroId = null;
+        }
+      }
+      if (kitClassificacoesFuture != null) {
+        _kitClassificacoes = await kitClassificacoesFuture;
+        // Se a classificação filtrada não existir mais, volta para TODOS.
+        if (_kitClassificacaoFiltroId != null &&
+            !_kitClassificacoes.any((c) => (c['classificacaokitid'] as num?)?.toInt() == _kitClassificacaoFiltroId)) {
+          _kitClassificacaoFiltroId = null;
+        }
       }
 
       final offsetImposto = impostoPctFuture != null ? 1 : 0;
@@ -1288,6 +1338,153 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Abre a pré-visualização do relatório PDF dos kits (com Imprimir e Salvar),
+  /// usando somente os kits visíveis (filtro de classificação aplicado).
+  Future<void> _openKitPdf(List<Map<String, dynamic>> rows) async {
+    final session = context.read<AppSessionController>();
+    final filtroId = _kitClassificacaoFiltroId;
+    final filtroNome = filtroId == null
+        ? 'TODOS'
+        : (_kitClassificacoes
+                .where((c) => (c['classificacaokitid'] as num?)?.toInt() == filtroId)
+                .map((c) => (c['nome'] ?? '').toString())
+                .firstOrNull ??
+            '#$filtroId');
+    final imposto = _empresaSetupImpostoPct;
+    final taxaMotoboy = _empresaSetupTaxaMotoboyPct;
+    final deliveries = List<_KitDelivery>.from(_kitDeliveries);
+    final kits = List<Map<String, dynamic>>.from(rows);
+    final empresa = session.empresaLabel;
+
+    Future<Uint8List> build(PdfPageFormat format) async {
+      final linhas = await Future.wait(kits.map((row) async {
+        final kitId = row['kitid'];
+        final empresaRaw = row['empresaid'];
+        KitTotals? totals;
+        if (kitId is num) {
+          try {
+            totals = await KitService().loadTotals(
+              kitId.toInt(),
+              empresaId: empresaRaw is num ? empresaRaw.toInt() : session.empresaId,
+            );
+          } catch (e) {
+            debugPrint('KitPdf: loadTotals failed kitId=$kitId: $e');
+          }
+        }
+        final total = totals?.totalKitComTaxa;
+        final classificacao = row['classificacao'];
+        return KitPdfLinha(
+          nome: (row['nome'] ?? '').toString().trim(),
+          classificacao: classificacao is Map ? classificacao['nome']?.toString() : null,
+          inativo: (row['status'] ?? '').toString().trim().toUpperCase() == 'I',
+          valorTotal: total,
+          valorListaSite: calcularValorDeLista(total, [imposto, taxaMotoboy ?? 0]),
+          deliveries: [
+            for (final d in deliveries)
+              KitPdfDelivery(nome: d.nome, taxaPct: d.taxaPct, valorLista: calcularValorDeLista(total, [d.taxaPct, imposto])),
+          ],
+        );
+      }));
+      return KitPdfReport.build(
+        format: format,
+        empresa: empresa,
+        filtroClassificacao: filtroNome,
+        impostoPct: imposto,
+        taxaMotoboyPct: taxaMotoboy,
+        deliveries: [for (final d in deliveries) KitPdfDelivery(nome: d.nome, taxaPct: d.taxaPct)],
+        linhas: linhas,
+      );
+    }
+
+    await _showPdfPreview(titulo: 'Relatório de kits', arquivo: 'kits', build: build);
+  }
+
+  /// Tipos de item (tabela interna, sem empresa) para o filtro da lista de itens.
+  Future<List<Map<String, dynamic>>> _loadItemTipos() async {
+    try {
+      return await SupabaseService.select('tipoitem', select: 'tipoitemid,nome', orderBy: 'nome', ascending: true, limit: 200);
+    } catch (e) {
+      debugPrint('Load tipoitem (filtro item) failed: $e');
+      return const [];
+    }
+  }
+
+  /// Abre a pré-visualização do relatório PDF dos itens visíveis (filtros aplicados).
+  Future<void> _openItemPdf(List<Map<String, dynamic>> rows) async {
+    final session = context.read<AppSessionController>();
+    final tipoId = _itemTipoFiltroId;
+    final tipoNome = tipoId == null
+        ? 'TODOS'
+        : (_itemTipos
+                .where((t) => (t['tipoitemid'] as num?)?.toInt() == tipoId)
+                .map((t) => (t['nome'] ?? '').toString())
+                .firstOrNull ??
+            '#$tipoId');
+    final itens = List<Map<String, dynamic>>.from(rows);
+    final filtroNome = _itemSearchQuery.trim();
+    final empresa = session.empresaLabel;
+    await _showPdfPreview(
+      titulo: 'Relatório de itens',
+      arquivo: 'itens',
+      build: (format) => ItemPdfReport.build(
+        format: format,
+        empresa: empresa,
+        filtroTipo: tipoNome,
+        filtroNome: filtroNome,
+        itens: itens,
+      ),
+    );
+  }
+
+  /// Tela cheia com a pré-visualização do PDF e os botões Imprimir e Salvar.
+  Future<void> _showPdfPreview({
+    required String titulo,
+    required String arquivo,
+    required Future<Uint8List> Function(PdfPageFormat format) build,
+  }) async {
+    await showPdfPreviewDialog(context, titulo: titulo, arquivo: arquivo, build: build);
+  }
+
+  /// Classificações de kit da empresa (para o filtro da lista de kits).
+  Future<List<Map<String, dynamic>>> _loadKitClassificacoes(int empresaId) async {
+    try {
+      return await SupabaseService.select(
+        'classificacaokit',
+        select: 'classificacaokitid,nome',
+        filters: {'empresaid': empresaId},
+        orderBy: 'nome',
+        ascending: true,
+        limit: 500,
+      );
+    } catch (e) {
+      debugPrint('Load classificacaokit (filtro kit) failed: $e');
+      return const [];
+    }
+  }
+
+  /// Deliveries com associação ativa (empresadelivery.status = 'A') para a empresa.
+  Future<List<_KitDelivery>> _loadKitDeliveries(int empresaId) async {
+    try {
+      final rows = await SupabaseService.select(
+        'empresadelivery',
+        select: 'deliveryid,taxadelivery, delivery:deliveryid(nome)',
+        filters: {'empresaid': empresaId, 'status': 'A'},
+        limit: 100,
+      );
+      final list = <_KitDelivery>[
+        for (final r in rows)
+          _KitDelivery(
+            nome: ((r['delivery'] is Map ? (r['delivery'] as Map)['nome'] : null) ?? 'Delivery #${r['deliveryid']}').toString().trim(),
+            taxaPct: parsePtBrNumber(r['taxadelivery']),
+          ),
+      ]..sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
+      return list;
+    } catch (e) {
+      debugPrint('Load empresadelivery (kit) failed: $e');
+      return const [];
     }
   }
 
@@ -1882,7 +2079,13 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
         ? _filteredRows
         : (isProduto
               ? _produtoFilteredRows
-              : (isItem ? _itemFilteredRows : _rows));
+              : (isItem
+                    ? _itemFilteredRows
+                    : (isKit && _kitClassificacaoFiltroId != null
+                          ? _rows
+                              .where((r) => (r['classificacaokitid'] as num?)?.toInt() == _kitClassificacaoFiltroId)
+                              .toList(growable: false)
+                          : _rows)));
 
     // UX: when inside a nested context (e.g., Receita -> Ingredientes/Materiais)
     // we already show the count next to the section title. Avoid duplicating it
@@ -1900,11 +2103,12 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                       ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
+                    // Quantidade de kits em destaque (fundo vermelho).
                     DecoratedBox(
                       decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+                        color: Colors.red.shade700,
                         borderRadius: BorderRadius.circular(AppRadius.lg),
-                        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+                        border: Border.all(color: Colors.red.shade700),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1918,7 +2122,7 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                             key: ValueKey('itemsCount_${widget.definition.keyName}_${visibleRows.length}'),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+                            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
                           ),
                         ),
                       ),
@@ -2070,6 +2274,95 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
             ),
           );
 
+    // Kit: filtro por classificação (TODOS = sem filtro).
+    final kitFilterField = !isKit || _contextReceitaId != null
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: AppSpacing.sm),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(AppRadius.xl),
+                border: Border.all(color: cs.outline.withValues(alpha: 0.14)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 2),
+                child: Row(
+                  children: [
+                    Icon(Icons.filter_list_rounded, size: 18, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 10),
+                    Text('Classificação:', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int?>(
+                          value: _kitClassificacaoFiltroId,
+                          isExpanded: true,
+                          items: [
+                            const DropdownMenuItem<int?>(value: null, child: Text('TODOS')),
+                            for (final c in _kitClassificacoes)
+                              if (c['classificacaokitid'] is num)
+                                DropdownMenuItem<int?>(
+                                  value: (c['classificacaokitid'] as num).toInt(),
+                                  child: Text((c['nome'] ?? '').toString(), overflow: TextOverflow.ellipsis),
+                                ),
+                          ],
+                          onChanged: (v) => setState(() => _kitClassificacaoFiltroId = v),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+
+    // Item: filtro por tipo (TODOS = sem filtro).
+    final itemTipoFilterField = !isItem
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(AppRadius.xl),
+                border: Border.all(color: cs.outline.withValues(alpha: 0.14)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 2),
+                child: Row(
+                  children: [
+                    Icon(Icons.filter_list_rounded, size: 18, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 10),
+                    Text('Tipo:', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int?>(
+                          value: _itemTipoFiltroId,
+                          isExpanded: true,
+                          items: [
+                            const DropdownMenuItem<int?>(value: null, child: Text('TODOS')),
+                            for (final t in _itemTipos)
+                              if (t['tipoitemid'] is num)
+                                DropdownMenuItem<int?>(
+                                  value: (t['tipoitemid'] as num).toInt(),
+                                  child: Text((t['nome'] ?? '').toString(), overflow: TextOverflow.ellipsis),
+                                ),
+                          ],
+                          onChanged: (v) => setState(() {
+                            _itemTipoFiltroId = v;
+                            _applyItemFilter();
+                          }),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+
     final itemFilterField = !isItem
         ? const SizedBox.shrink()
         : Padding(
@@ -2205,6 +2498,20 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                     isLoading: _isLoading,
                     onRefresh: _load,
                     onCreate: canCreate ? _openCreate : null,
+                    leadingActions: [
+                      if (isItem)
+                        OutlinedButton.icon(
+                          onPressed: _isLoading ? null : () => _openItemPdf(visibleRows),
+                          icon: Icon(Icons.picture_as_pdf_rounded, color: cs.primary),
+                          label: Text('PDF', style: TextStyle(color: cs.primary)),
+                        ),
+                      if (isKit)
+                        OutlinedButton.icon(
+                          onPressed: _isLoading ? null : () => _openKitPdf(visibleRows),
+                          icon: Icon(Icons.picture_as_pdf_rounded, color: cs.primary),
+                          label: Text('PDF', style: TextStyle(color: cs.primary)),
+                        ),
+                    ],
                   ),
                 ],
               ),
@@ -2216,6 +2523,8 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
             receitaFilterField,
             produtoFilterField,
             itemFilterField,
+            itemTipoFilterField,
+            kitFilterField,
             const SizedBox(height: AppSpacing.xs),
             itemsCountLine,
             const SizedBox(height: AppSpacing.md),
@@ -2227,10 +2536,12 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                   : visibleRows.isEmpty
                   ? const _EmptyPanel()
                   : Scrollbar(
+                      controller: _listScrollController,
                       thumbVisibility: true,
                       child: isEmpresaDelivery
                           ? _buildEmpresaDeliveryGroupedList(rows: visibleRows)
                           : ListView.separated(
+                              controller: _listScrollController,
                               itemCount: visibleRows.length,
                               // Compact separators so more rows fit without scrolling.
                               separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.xs),
@@ -2241,6 +2552,7 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                                   row: row,
                                   kitImpostoPct: _empresaSetupImpostoPct,
                                   kitTaxaMotoboyPct: _empresaSetupTaxaMotoboyPct,
+                                  kitDeliveries: _kitDeliveries,
                                   onEdit: () => _openEdit(row),
                                   onDelete: () => _delete(row),
                                   onRefreshRequested: _load,
@@ -3177,13 +3489,16 @@ class _ReceitaInlineCostsRow extends StatelessWidget {
 }
 
 class _KitInlineInfoRow extends StatefulWidget {
-  const _KitInlineInfoRow({required this.row, this.impostoPct, this.taxaMotoboyPct});
+  const _KitInlineInfoRow({required this.row, this.impostoPct, this.taxaMotoboyPct, this.deliveries = const []});
 
   final Map<String, dynamic> row;
 
   /// Valores exibidos no topo da lista de kits (cards Imposto e Taxa motoboy).
   final num? impostoPct;
   final num? taxaMotoboyPct;
+
+  /// Deliveries ativos da empresa logada: uma linha por delivery em cada kit.
+  final List<_KitDelivery> deliveries;
 
   @override
   State<_KitInlineInfoRow> createState() => _KitInlineInfoRowState();
@@ -3291,19 +3606,55 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
           final divisor = imposto == null ? null : 1 - imposto / 100 - (widget.taxaMotoboyPct ?? 0) / 100;
           final valorListaSite = (divisor != null && divisor > 0) ? prod / divisor : null;
 
-          return Container(
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-              border: Border.all(color: cs.outline.withValues(alpha: 0.12)),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
-            child: Center(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+          Widget line(List<Widget> pills) => Container(
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  border: Border.all(color: cs.outline.withValues(alpha: 0.12)),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: pills),
+                  ),
+                ),
+              );
+
+          // Uma linha por delivery: valor total do kit / (1 - taxa delivery/100 - imposto/100).
+          final deliveryLines = <Widget>[
+            for (final d in widget.deliveries)
+              Builder(builder: (context) {
+                final taxa = d.taxaPct;
+                final div = (imposto == null || taxa == null) ? null : 1 - taxa / 100 - imposto / 100;
+                final valorLista = (div != null && div > 0) ? prod / div : null;
+                return Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: line([
+                    _InlineInfoPill(icon: Icons.delivery_dining_rounded, label: 'Nome', value: d.nome, colorScheme: cs),
+                    const SizedBox(width: AppSpacing.sm),
+                    _InlineInfoPill(
+                      label: 'Taxa de delivery - %',
+                      value: taxa == null ? '—' : formatPtBrMoney(taxa, decimalDigits: 2),
+                      colorScheme: cs,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    _InlineInfoPill(
+                      icon: Icons.storefront_rounded,
+                      label: 'Valor de lista para ${d.nome} - R\$',
+                      value: valorLista == null ? '—' : formatPtBrCurrency(valorLista),
+                      colorScheme: cs,
+                    ),
+                  ]),
+                );
+              }),
+          ];
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              line([
                     _InlineInfoPill(
                       icon: Icons.shopping_bag_rounded,
                       label: 'Valor total do kit - R\$',
@@ -3319,10 +3670,9 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
                         colorScheme: cs,
                       ),
                     ],
-                  ],
-                ),
-              ),
-            ),
+              ]),
+              ...deliveryLines,
+            ],
           );
         },
       );
@@ -3340,8 +3690,23 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
   }
 }
 
+/// Delivery ativo da empresa (empresadelivery + delivery.nome) usado na lista de kits.
+class _KitDelivery {
+  const _KitDelivery({required this.nome, this.taxaPct});
+  final String nome;
+  final num? taxaPct;
+}
+
 class _InlineInfoPill extends StatelessWidget {
-  const _InlineInfoPill({this.icon, required this.label, required this.value, required this.colorScheme, this.emphasize = false});
+  const _InlineInfoPill({
+    this.icon,
+    required this.label,
+    required this.value,
+    required this.colorScheme,
+    this.emphasize = false,
+    this.backgroundColor,
+    this.foregroundColor,
+  });
 
   final IconData? icon;
   final String label;
@@ -3349,10 +3714,17 @@ class _InlineInfoPill extends StatelessWidget {
   final ColorScheme colorScheme;
   final bool emphasize;
 
+  /// Cores opcionais (ex.: card de classificação em verde). Sobrepõem o padrão.
+  final Color? backgroundColor;
+  final Color? foregroundColor;
+
   @override
   Widget build(BuildContext context) {
-    final bg = emphasize ? colorScheme.primary.withValues(alpha: 0.10) : colorScheme.surfaceContainerHighest.withValues(alpha: 0.55);
-    final fg = emphasize ? colorScheme.primary : colorScheme.onSurfaceVariant;
+    final bg = backgroundColor ??
+        (emphasize ? colorScheme.primary.withValues(alpha: 0.10) : colorScheme.surfaceContainerHighest.withValues(alpha: 0.55));
+    final fg = foregroundColor ?? (emphasize ? colorScheme.primary : colorScheme.onSurfaceVariant);
+    final labelColor = foregroundColor ?? colorScheme.onSurfaceVariant;
+    final valueColor = foregroundColor ?? colorScheme.onSurface;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: bg,
@@ -3372,13 +3744,13 @@ class _InlineInfoPill extends StatelessWidget {
               '$label: ',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(color: labelColor, fontWeight: FontWeight.w700),
             ),
             Text(
               value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(color: colorScheme.onSurface, fontWeight: FontWeight.w800),
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(color: valueColor, fontWeight: FontWeight.w800),
             ),
           ],
         ),
@@ -3396,6 +3768,7 @@ class _RowCard extends StatelessWidget {
     this.onRefreshRequested,
     this.kitImpostoPct,
     this.kitTaxaMotoboyPct,
+    this.kitDeliveries = const [],
   });
 
   final CadastroDefinition definition;
@@ -3404,6 +3777,7 @@ class _RowCard extends StatelessWidget {
   /// Kit: imposto e taxa motoboy exibidos no topo da lista (empresa logada).
   final num? kitImpostoPct;
   final num? kitTaxaMotoboyPct;
+  final List<_KitDelivery> kitDeliveries;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback? onRefreshRequested;
@@ -3513,6 +3887,31 @@ class _RowCard extends StatelessWidget {
       }
     }
 
+    // Kit: card "Classificação" ao lado do nome (classificacaokit.nome via join).
+    final classificacaoJoin = row['classificacao'];
+    final kitClassificacaoNome =
+        isKit && classificacaoJoin is Map ? classificacaoJoin['nome']?.toString().trim() : null;
+    Widget titleWithKitClassificacao(Widget title) {
+      if (kitClassificacaoNome == null || kitClassificacaoNome.isEmpty) return title;
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Flexible(child: title),
+          const SizedBox(width: AppSpacing.sm),
+          Flexible(
+            child: _InlineInfoPill(
+              icon: Icons.label_rounded,
+              label: 'Classificação',
+              value: kitClassificacaoNome,
+              colorScheme: cs,
+              backgroundColor: Colors.green.shade700,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      );
+    }
+
     return DecoratedBox(
       decoration: BoxDecoration(
         color: cs.surface,
@@ -3534,13 +3933,13 @@ class _RowCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: Text(
+                          child: titleWithKitClassificacao(Text(
                             titleText,
                             // Receita names can be long; allow up to 2 lines.
                             maxLines: isReceita ? 2 : 1,
                             overflow: TextOverflow.ellipsis,
                             style: titleStyle,
-                          ),
+                          )),
                         ),
                         const SizedBox(width: AppSpacing.sm),
                         const _StatusBadge(text: 'INATIVO'),
@@ -3591,13 +3990,13 @@ class _RowCard extends StatelessWidget {
                                          _ItemInlineInfoPills(row: row),
                                        ],
                                      )
-                              : Text(
+                              : titleWithKitClassificacao(Text(
                                   titleText,
                                   // Receita names can be long; allow up to 2 lines.
                                   maxLines: isReceita ? 2 : 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: titleStyle,
-                                ),
+                                )),
                         ),
                         if (isDespesaFixaCadastro && (despesaFixaCustoTxt?.trim().isNotEmpty ?? false)) ...[
                           const SizedBox(width: AppSpacing.sm),
@@ -3706,7 +4105,7 @@ class _RowCard extends StatelessWidget {
                   else if (isReceita)
                     _ReceitaInlineCostsRow(row: row)
                   else if (isKit)
-                    _KitInlineInfoRow(row: row, impostoPct: kitImpostoPct, taxaMotoboyPct: kitTaxaMotoboyPct)
+                    _KitInlineInfoRow(row: row, impostoPct: kitImpostoPct, taxaMotoboyPct: kitTaxaMotoboyPct, deliveries: kitDeliveries)
                   else if (subtitleText != null && subtitleText.isNotEmpty)
                     Text(subtitleText, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.25))
                   else if (lines.isNotEmpty)

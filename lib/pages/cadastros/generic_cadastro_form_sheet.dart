@@ -1173,6 +1173,23 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       return;
     }
 
+    // Kit -> Classificação: somente classificações ativas da empresa logada.
+    // Na edição, mantém a classificação atual mesmo se inativa (o combo precisa conter o valor selecionado).
+    if (widget.definition.keyName == 'kit' && f.column == 'classificacaokitid' && fk.table == 'classificacaokit') {
+      if (empresaIdForScopedQueries == null) {
+        if (!mounted) return;
+        setState(() => _fkOptions[f.column] = const []);
+        return;
+      }
+      final currentId = int.tryParse(_ctrls['classificacaokitid']?.text.trim() ?? '');
+      var query = SupabaseConfig.client.from('classificacaokit').select(select).eq('empresaid', empresaIdForScopedQueries);
+      query = currentId == null ? query.eq('status', 'A') : query.or('status.eq.A,classificacaokitid.eq.$currentId');
+      final rows = await query.order('nome', ascending: true).limit(500);
+      if (!mounted) return;
+      setState(() => _fkOptions[f.column] = List<Map<String, dynamic>>.from(rows));
+      return;
+    }
+
     // Imposto e taxas (novo) -> Empresa: não exibir empresas que já possuem cadastro.
     if (!_isEdit && _isEmpresaTaxas && f.column == 'empresaid' && fk.table == 'empresa') {
       final assoc = await SupabaseConfig.client.from('empresasetup').select('empresaid').limit(1000);
@@ -2415,6 +2432,35 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
             // deixe o BD rejeitar caso exista constraint.
             debugPrint('Failed to pre-check delivery.nome uniqueness: $e');
           }
+        }
+      }
+
+      // Classificação de Kit: nome único por empresa (sem diferenciar maiúsculas/minúsculas).
+      if (widget.definition.keyName == 'classificacaokit') {
+        final normalized = normalizeCollapsedSpaces(data['nome']?.toString() ?? '');
+        if (normalized.isEmpty) {
+          _failSave('Informe um nome válido.');
+          return;
+        }
+        data['nome'] = normalized;
+        if (empresaId == null) {
+          _failSave('Não foi possível identificar a empresa do usuário logado.');
+          return;
+        }
+        final existentes = await SupabaseService.select(
+          'classificacaokit',
+          select: 'classificacaokitid,nome',
+          filters: {'empresaid': empresaId},
+          limit: 1000,
+        );
+        final rawId = widget.initialRow?[widget.definition.idColumn];
+        final currentId = rawId?.toString();
+        final duplicado = existentes.any((r) =>
+            normalizeCollapsedSpaces(r['nome']?.toString() ?? '').toLowerCase() == normalized.toLowerCase() &&
+            r['classificacaokitid']?.toString() != currentId);
+        if (duplicado) {
+          _failSave('Já existe uma classificação de kit com este nome para esta empresa.');
+          return;
         }
       }
 
