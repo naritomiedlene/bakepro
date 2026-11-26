@@ -7,7 +7,6 @@ import 'package:bakepro/services/totaldespesas_service.dart';
 import 'package:bakepro/services/state/app_session_controller.dart';
 import 'package:bakepro/supabase/supabase_config.dart';
 import 'package:bakepro/theme.dart';
-import 'package:bakepro/utils/number_parsing.dart';
 import 'package:bakepro/utils/picked_file_bytes.dart';
 import 'package:bakepro/utils/text_normalization.dart';
 import 'package:bakepro/utils/web_file_input.dart';
@@ -2708,100 +2707,43 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
   }
 
   Future<void> _syncTotalDespesasVariavel(int empresaId) async {
-    // Regra solicitada:
-    // - após salvar despesavariavel, somar todos os `valormensal` (ou coluna equivalente)
-    //   da empresa logada
-    // - atualizar/gerar registro em `totaldespesas` com o total no campo `totalDespesaVariavel`.
+    // Regra: após criar/editar uma despesa variável, recalcular o total das despesas
+    // variáveis ATIVAS da empresa e gravar em `totaldespesas.totaldespesavariavel`.
+    // Capturado antes do await: o aviso aparece na tela da lista mesmo após o formulário fechar.
+    final messenger = ScaffoldMessenger.maybeOf(context);
     try {
-      final total = await _sumDespesaVariavelValorMensal(empresaId);
-
-      await TotalDespesasService.setTotals(empresaId: empresaId, totalDespesaVariavel: total);
-      debugPrint('TotalDespesas synced for empresaId=$empresaId totaldespesavariavel=$total');
+      await TotalDespesasService.recalcularDespesaVariavel(empresaId);
     } catch (e) {
-      // Não bloqueia o salvamento do item, mas registra para diagnóstico.
-      debugPrint('Failed to sync totaldespesas (empresaId=$empresaId): $e');
+      // Não bloqueia o salvamento do item, mas avisa o usuário.
+      debugPrint('Failed to sync totaldespesas.totaldespesavariavel (empresaId=$empresaId): $e');
+      _avisarFalhaRecalculo(messenger, 'despesas variáveis');
     }
   }
 
   Future<void> _syncTotalDespesasFixas(int empresaId) async {
-    // Regra solicitada:
-    // - após salvar uma despesa fixa (despesafixa), somar todos os `valormensal`
-    //   da empresa logada
-    // - atualizar/gerar registro em `totaldespesas` com o total no campo `totaldespesafixa`.
+    // Regra: após criar/editar uma despesa fixa, recalcular o total das despesas
+    // fixas ATIVAS da empresa e gravar em `totaldespesas.totaldespesafixa`.
+    final messenger = ScaffoldMessenger.maybeOf(context);
     try {
-      final total = await _sumDespesaFixaValorMensal(empresaId);
-
-      await TotalDespesasService.setTotals(empresaId: empresaId, totalDespesaFixa: total);
-      debugPrint('TotalDespesas synced for empresaId=$empresaId totaldespesafixa=$total');
+      await TotalDespesasService.recalcularDespesaFixa(empresaId);
     } catch (e) {
       debugPrint('Failed to sync totaldespesas.totaldespesafixa (empresaId=$empresaId): $e');
+      _avisarFalhaRecalculo(messenger, 'despesas fixas');
     }
   }
 
-  Future<double> _sumDespesaFixaValorMensal(int empresaId) async {
-    // Somar `valormensal` na tabela `despesafixa` por empresa.
-    const pageSize = 1000;
-    var from = 0;
-    var total = 0.0;
-    var rowsFetched = 0;
-
-    while (true) {
-      final dynamic page = await SupabaseConfig.client
-          .from('despesafixa')
-          .select('valormensal')
-          .eq('empresaid', empresaId)
-          .range(from, from + pageSize - 1);
-
-      if (page is! List || page.isEmpty) break;
-      rowsFetched += page.length;
-
-      for (final r in page) {
-        if (r is! Map) continue;
-        final raw = r['valormensal'];
-        final n = parsePtBrNumber(raw);
-        if (n != null) total += n;
-      }
-
-      if (page.length < pageSize) break;
-      from += pageSize;
-    }
-
-    debugPrint('Sum (Dart) despesafixa.valormensal empresaId=$empresaId rows=$rowsFetched total=$total');
-    return total;
-  }
-
-  Future<double> _sumDespesaVariavelValorMensal(int empresaId) async {
-    // Regra: somar todos os `valormensal` da empresa (somente status='A').
-    // Seu PostgREST está bloqueando agregações (PGRST123), então somamos no Dart.
-    const pageSize = 1000;
-    var from = 0;
-    var total = 0.0;
-    var rowsFetched = 0;
-
-    while (true) {
-      final dynamic page = await SupabaseConfig.client
-          .from('despesavariavel')
-          .select('valormensal')
-          .eq('empresaid', empresaId)
-          .eq('status', 'A')
-          .range(from, from + pageSize - 1);
-
-      if (page is! List || page.isEmpty) break;
-      rowsFetched += page.length;
-
-      for (final r in page) {
-        if (r is! Map) continue;
-        final raw = r['valormensal'];
-        final n = parsePtBrNumber(raw);
-        if (n != null) total += n;
-      }
-
-      if (page.length < pageSize) break;
-      from += pageSize;
-    }
-
-    debugPrint('Sum (Dart) despesavariavel.valormensal empresaId=$empresaId status=A rows=$rowsFetched total=$total');
-    return total;
+  void _avisarFalhaRecalculo(ScaffoldMessengerState? messenger, String oQue) {
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text(
+          'A despesa foi salva, mas não foi possível atualizar o total de $oQue. '
+          'Abra a lista novamente ou clique em Atualizar para recalcular.',
+        ),
+        behavior: SnackBarBehavior.floating,
+        showCloseIcon: true,
+        duration: const Duration(seconds: 8),
+      ),
+    );
   }
 
   void _failSave(String message) {

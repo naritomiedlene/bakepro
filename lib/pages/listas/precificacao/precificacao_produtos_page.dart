@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:bakepro/components/pdf_preview_dialog.dart';
 import 'package:bakepro/nav.dart';
 import 'package:bakepro/services/relatorios/precificacao_pdf_report.dart';
+import 'package:bakepro/services/totaldespesas_service.dart';
 import 'package:bakepro/supabase/supabase_config.dart';
 import 'package:bakepro/theme.dart';
 import 'package:bakepro/utils/number_parsing.dart';
@@ -342,20 +343,10 @@ class _PrecificacaoProdutosPageState extends State<PrecificacaoProdutosPage> {
   Future<Map<int, double>> _computeDespesaFixaPorUnidade({required dynamic empresaId, required List<int> categoriaIds}) async {
     if (categoriaIds.isEmpty) return const {};
     try {
-      // 1) Soma das despesas fixas mensais da empresa.
-      final dynamic despesasRaw = await SupabaseConfig.client
-          .from('despesafixa')
-          .select('valormensal')
-          .eq('empresaid', empresaId)
-          .limit(5000);
-
-      var somaDespesaFixaMensal = 0.0;
-      if (despesasRaw is List) {
-        for (final d in despesasRaw) {
-          if (d is! Map) continue;
-          somaDespesaFixaMensal += parsePtBrNumber(d['valormensal']) ?? 0.0;
-        }
-      }
+      // 1) Soma das despesas fixas mensais ATIVAS da empresa.
+      final somaDespesaFixaMensal = await TotalDespesasService.somarDespesaFixaAtiva(
+        empresaId is int ? empresaId : int.parse(empresaId.toString()),
+      );
 
       // 2) Buscar percentual de rateio e produção mensal por categoria.
       final dynamic catsRaw = await SupabaseConfig.client
@@ -394,20 +385,10 @@ class _PrecificacaoProdutosPageState extends State<PrecificacaoProdutosPage> {
   Future<Map<int, double>> _computeDespesaVariavelPorUnidade({required dynamic empresaId, required List<int> categoriaIds}) async {
     if (categoriaIds.isEmpty) return const {};
     try {
-      // 1) Soma das despesas variáveis mensais da empresa.
-      final dynamic despesasRaw = await SupabaseConfig.client
-          .from('despesavariavel')
-          .select('valormensal')
-          .eq('empresaid', empresaId)
-          .limit(5000);
-
-      var somaDespesaVariavelMensal = 0.0;
-      if (despesasRaw is List) {
-        for (final d in despesasRaw) {
-          if (d is! Map) continue;
-          somaDespesaVariavelMensal += parsePtBrNumber(d['valormensal']) ?? 0.0;
-        }
-      }
+      // 1) Soma das despesas variáveis mensais ATIVAS da empresa.
+      final somaDespesaVariavelMensal = await TotalDespesasService.somarDespesaVariavelAtiva(
+        empresaId is int ? empresaId : int.parse(empresaId.toString()),
+      );
 
       // 2) Buscar percentual de rateio e produção mensal por categoria.
       final dynamic catsRaw = await SupabaseConfig.client

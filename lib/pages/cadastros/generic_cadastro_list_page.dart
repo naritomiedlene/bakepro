@@ -15,6 +15,7 @@ import 'package:bakepro/theme.dart';
 import 'package:bakepro/components/stacked_list_actions.dart';
 import 'package:bakepro/components/confirm_delete_sheet.dart';
 import 'package:bakepro/utils/number_parsing.dart';
+import 'package:bakepro/utils/text_normalization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -555,39 +556,21 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
     }
   }
 
-  Future<double> _sumDespesaVariavelValorMensal(int empresaId) async {
-    // Seu backend está retornando PGRST123 ("Use of aggregate functions is not allowed"),
-    // então evitamos completamente `.sum()` e calculamos no Dart.
-    const pageSize = 1000;
-    var from = 0;
-    var total = 0.0;
-    var rowsFetched = 0;
-
-    while (true) {
-      final dynamic page = await SupabaseConfig.client
-          .from('despesavariavel')
-          .select('valormensal')
-          .eq('empresaid', empresaId)
-          .eq('status', 'A')
-          .range(from, from + pageSize - 1);
-
-      if (page is! List || page.isEmpty) break;
-      rowsFetched += page.length;
-
-      for (final r in page) {
-        if (r is! Map) continue;
-        final raw = r['valormensal'];
-        final n = parsePtBrNumber(raw);
-        if (n != null) total += n;
-      }
-
-      if (page.length < pageSize) break;
-      from += pageSize;
-    }
-
-    debugPrint('Sum (Dart) despesavariavel.valormensal empresaId=$empresaId status=A rows=$rowsFetched total=$total');
-    return total;
+  /// Aviso na tela quando o total de despesas não pôde ser gravado em `totaldespesas`.
+  void _avisarFalhaRecalculo(String mensagem) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensagem),
+        behavior: SnackBarBehavior.floating,
+        showCloseIcon: true,
+        duration: const Duration(seconds: 8),
+      ),
+    );
   }
+
+  // Total das despesas variáveis ATIVAS (status = 'A') da empresa.
+  Future<double> _sumDespesaVariavelValorMensal(int empresaId) => TotalDespesasService.somarDespesaVariavelAtiva(empresaId);
 
   Future<double?> _loadTotalDespesaVariavelAndMaybeSync(int empresaId) async {
     // Observação importante: em alguns schemas a tabela `totaldespesas` não possui
@@ -618,6 +601,8 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       } catch (e) {
         // Mesmo se o upsert falhar (RLS/coluna inexistente/etc), ainda mostramos o total calculado.
         debugPrint('Failed to upsert totaldespesas (empresaId=$empresaId). Using calculated total=$fromItems. Error: $e');
+        _avisarFalhaRecalculo('Não foi possível gravar o total de despesas variáveis. O valor exibido foi calculado na tela; '
+            'clique em Atualizar para tentar novamente.');
       }
       return fromItems;
     }
@@ -625,39 +610,8 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
     return fromTotalDespesas;
   }
 
-  Future<double> _sumDespesaFixaValorMensal(int empresaId) async {
-    // O cadastro exibido como "Despesas Fixas" usa a tabela `despesafixa`.
-    // Coluna monetária: `valormensal`.
-    // Como o backend pode bloquear agregações (PGRST123), somamos no Dart.
-    const pageSize = 1000;
-    var from = 0;
-    var total = 0.0;
-    var rowsFetched = 0;
-
-    while (true) {
-      final dynamic page = await SupabaseConfig.client
-          .from('despesafixa')
-          .select('valormensal')
-          .eq('empresaid', empresaId)
-          .range(from, from + pageSize - 1);
-
-      if (page is! List || page.isEmpty) break;
-      rowsFetched += page.length;
-
-      for (final r in page) {
-        if (r is! Map) continue;
-        final raw = r['valormensal'];
-        final n = parsePtBrNumber(raw);
-        if (n != null) total += n;
-      }
-
-      if (page.length < pageSize) break;
-      from += pageSize;
-    }
-
-    debugPrint('Sum (Dart) despesafixa.valormensal empresaId=$empresaId rows=$rowsFetched total=$total');
-    return total;
-  }
+  // Total das despesas fixas ATIVAS (status = 'A') da empresa.
+  Future<double> _sumDespesaFixaValorMensal(int empresaId) => TotalDespesasService.somarDespesaFixaAtiva(empresaId);
 
   Future<double?> _loadTotalDespesaFixaAndMaybeSync(int empresaId) async {
     double? fromTotalDespesas;
@@ -681,6 +635,8 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
         debugPrint('TotalDespesaFixa autocorrected for empresaId=$empresaId total=$fromItems (was=$fromTotalDespesas)');
       } catch (e) {
         debugPrint('Failed to upsert totaldespesas.totaldespesafixa (empresaId=$empresaId). Using calculated total=$fromItems. Error: $e');
+        _avisarFalhaRecalculo('Não foi possível gravar o total de despesas fixas. O valor exibido foi calculado na tela; '
+            'clique em Atualizar para tentar novamente.');
       }
       return fromItems;
     }
@@ -1302,9 +1258,22 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
         if (widget.definition.keyName != 'ingrediente') _totalCustoMateriaisReceita = null;
       }
 
+      // Despesas fixas e variáveis: sempre em ordem alfabética do nome da despesa
+      // (sem diferenciar maiúsculas/acentos). Nas variáveis o nome vem do item.
+      var rowsOrdenadas = rows;
+      if (widget.definition.keyName == 'rateiodespesa' || widget.definition.keyName == 'despesavariavel') {
+        String nomeDespesa(Map<String, dynamic> r) {
+          final item = r['item'];
+          final nome = widget.definition.keyName == 'despesavariavel' && item is Map ? item['nome'] : r['nome'];
+          return chaveOrdenacaoAlfabetica((nome ?? '').toString());
+        }
+
+        rowsOrdenadas = List<Map<String, dynamic>>.from(rows)..sort((a, b) => nomeDespesa(a).compareTo(nomeDespesa(b)));
+      }
+
       if (!mounted) return;
       setState(() {
-        _rows = rows;
+        _rows = rowsOrdenadas;
         _applyReceitaFilter();
         _applyProdutoFilter();
         _applyItemFilter();
@@ -1937,7 +1906,31 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       }
       // Kits usam imposto/taxa adm do empresasetup em cache.
       if (widget.definition.table == 'empresasetup') KitService.clearEmpresaSetupCache();
+      // Despesas fixas/variáveis: recalcula o total (só ativas) em `totaldespesas` da empresa logada.
+      // `session` já foi lida no início de _delete (antes dos awaits).
+      final empresaLogada = session.empresaId;
+      String? falhaRecalculo;
+      if (empresaLogada != null && widget.definition.table == 'despesafixa') {
+        try {
+          await TotalDespesasService.recalcularDespesaFixa(empresaLogada);
+        } catch (e) {
+          debugPrint('Recalc totaldespesafixa after delete failed: $e');
+          falhaRecalculo = 'despesas fixas';
+        }
+      }
+      if (empresaLogada != null && widget.definition.table == 'despesavariavel') {
+        try {
+          await TotalDespesasService.recalcularDespesaVariavel(empresaLogada);
+        } catch (e) {
+          debugPrint('Recalc totaldespesavariavel after delete failed: $e');
+          falhaRecalculo = 'despesas variáveis';
+        }
+      }
       if (!mounted) return;
+      if (falhaRecalculo != null) {
+        _avisarFalhaRecalculo('A despesa foi excluída, mas não foi possível atualizar o total de $falhaRecalculo. '
+            'Clique em Atualizar para recalcular.');
+      }
       // Padrão adotado nos outros cadastros: após excluir, apenas recarrega a lista
       // (sem exibir SnackBar de sucesso, para evitar “poluição” visual).
       await _load();
@@ -2649,7 +2642,7 @@ class _TotalDespesaVariavelLine extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Total de despesas variáveis',
+                'Total de despesas variáveis mensais',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600),
@@ -2692,7 +2685,7 @@ class _TotalDespesaFixaLine extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Total de despesas fixas',
+                'Total de despesas fixas mensais',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600),
@@ -3222,7 +3215,7 @@ class _DespesaVariavelInlineInfoRow extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _InlineInfoPill(icon: Icons.scale_rounded, label: 'Consumo', value: '$consumoTxt$consumoSuffix', colorScheme: cs),
+              _InlineInfoPill(icon: Icons.scale_rounded, label: 'Consumo mensal', value: '$consumoTxt$consumoSuffix', colorScheme: cs),
               const SizedBox(width: 8),
               _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo unit.', value: '$custoUnitTxt$unitSuffix', colorScheme: cs),
               const SizedBox(width: 8),
@@ -3298,7 +3291,7 @@ class _DespesaVariavelInlineInfoPills extends StatelessWidget {
       runSpacing: 6,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        _InlineInfoPill(icon: Icons.scale_rounded, label: 'Consumo', value: '$consumoTxt$consumoSuffix', colorScheme: cs),
+        _InlineInfoPill(icon: Icons.scale_rounded, label: 'Consumo mensal', value: '$consumoTxt$consumoSuffix', colorScheme: cs),
         _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo unit.', value: '$custoUnitTxt$unitSuffix', colorScheme: cs),
         _InlineInfoPill(icon: Icons.summarize_rounded, label: 'Total/mês', value: valorTxt, colorScheme: cs, emphasize: true),
       ],
@@ -3891,8 +3884,8 @@ class _RowCard extends StatelessWidget {
     final categoriaRateio = isCategoria ? _formatPtBrNumber(row['percentualrateiodespesa']) : null;
     final categoriaLucro = isCategoria ? _formatPtBrNumber(row['percentuallucro']) : null;
 
-    // IMPORTANT: `rateiodespesa` (Despesas Fixas) não tem `status` no schema atual.
-    // Então não devemos exibir badge de inativo baseado nessa coluna.
+    // Despesas Fixas: o selo INATIVO é exibido na própria linha (junto do card Custo),
+    // mais abaixo; por isso não entram aqui.
     final showInactiveOnlyBadge = (isEmpresa || isUsuario || isFornecedor) && isInativo;
     // Seguir o padrão dos outros cadastros — só mostrar quando estiver inativo.
     final showProdutoBadge = isProduto && isInativo;
@@ -3989,19 +3982,18 @@ class _RowCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
+                          // Despesa variável: nome na 1ª linha e os cards de valores sempre na 2ª.
                           child: isDespesaVariavelCadastro
-                              ? Wrap(
-                                  spacing: AppSpacing.sm,
-                                  runSpacing: 6,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
+                              ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       titleText,
-                                      // Receita names can be long; allow up to 2 lines.
-                                      maxLines: isReceita ? 2 : 1,
+                                      maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: titleStyle,
                                     ),
+                                    const SizedBox(height: 6),
                                     _DespesaVariavelInlineInfoPills(row: row),
                                   ],
                                 )
@@ -4042,6 +4034,11 @@ class _RowCard extends StatelessWidget {
                               ),
                             ),
                           ),
+                        ],
+                        // Despesa fixa/variável inativa (status = 'I').
+                        if ((isDespesaFixaCadastro || isDespesaVariavelCadastro) && isInativo) ...[
+                          const SizedBox(width: AppSpacing.sm),
+                          const _StatusBadge(text: 'INATIVO'),
                         ],
                         const SizedBox(width: AppSpacing.sm),
                         _RowActions(definition: definition, row: row, onEdit: onEdit, onDelete: onDelete, onRefreshRequested: onRefreshRequested, horizontal: true),

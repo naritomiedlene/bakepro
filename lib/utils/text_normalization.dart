@@ -18,6 +18,19 @@ String normalizeCollapsedSpaces(String input) {
 /// Lowercased version of [normalizeCollapsedSpaces], useful for case-insensitive comparisons.
 String normalizeCollapsedSpacesLower(String input) => normalizeCollapsedSpaces(input).toLowerCase();
 
+/// Chave para ordenar nomes em ordem alfabética sem diferenciar maiúsculas,
+/// minúsculas e acentos (ex.: "Água", "agua" e "Aluguel" ficam juntos no "a").
+String chaveOrdenacaoAlfabetica(String input) {
+  const comAcento = 'áàâãäéèêëíìîïóòôõöúùûüçñÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ';
+  const semAcento = 'aaaaaeeeeiiiiooooouuuucnAAAAAEEEEIIIIOOOOOUUUUCN';
+  final buf = StringBuffer();
+  for (final ch in normalizeCollapsedSpaces(input).split('')) {
+    final i = comAcento.indexOf(ch);
+    buf.write(i >= 0 ? semAcento[i] : ch);
+  }
+  return buf.toString().toLowerCase();
+}
+
 @visibleForTesting
 bool isProbablySensitiveTextField(String column) {
   final c = column.toLowerCase();

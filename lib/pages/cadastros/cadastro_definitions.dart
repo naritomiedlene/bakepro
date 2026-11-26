@@ -445,6 +445,17 @@ class Cadastros {
         CadastroField(column: 'nome', label: 'Nome', type: CadastroFieldType.text, required: true),
         CadastroField(column: 'valormensal', label: 'Valor mensal (R\$)', type: CadastroFieldType.number, required: true),
         CadastroField(column: 'dataatualizacao', label: 'Data de atualização', type: CadastroFieldType.text, required: false),
+        // Somente despesas ativas entram no total de despesas fixas.
+        CadastroField(
+          column: 'status',
+          label: 'Status',
+          type: CadastroFieldType.option,
+          required: true,
+          options: [
+            CadastroOption(value: 'A', label: 'Ativo'),
+            CadastroOption(value: 'I', label: 'Inativo'),
+          ],
+        ),
       ],
     ),
 

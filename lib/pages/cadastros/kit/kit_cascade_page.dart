@@ -276,7 +276,10 @@ class _KitCascadePageState extends State<KitCascadePage> {
 
   Future<double> _loadSomaMensalDespesas({required String table, required dynamic empresaId}) async {
     try {
-      final dynamic despesasRaw = await SupabaseConfig.client.from(table).select('valormensal').eq('empresaid', empresaId).limit(5000);
+      var query = SupabaseConfig.client.from(table).select('valormensal').eq('empresaid', empresaId);
+      // Despesas fixas e variáveis: somente as ativas entram no total.
+      query = query.eq('status', 'A');
+      final dynamic despesasRaw = await query.limit(5000);
       var somaMensal = 0.0;
       if (despesasRaw is List) {
         for (final d in despesasRaw) {
