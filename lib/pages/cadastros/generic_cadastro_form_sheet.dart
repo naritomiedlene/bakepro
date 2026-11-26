@@ -347,6 +347,9 @@ class DespesaVariavelItemDetailsCard extends StatelessWidget {
 
 class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
 
+  /// Campos de texto longo exibidos em várias linhas (hoje: Descrição de Kit, Produto e Receita).
+  bool _isMultilineField(CadastroField f) => f.type == CadastroFieldType.text && f.column.toLowerCase() == 'descricao';
+
   bool _shouldNormalizeCadastroText(CadastroField f) {
     // Only normalize free text fields.
     if (f.type != CadastroFieldType.text) return false;
@@ -1717,12 +1720,18 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       );
     }
 
+    // Descrição: começa com 3 linhas e cresce até 6 (depois rola). Enter cria nova linha.
+    final multiline = _isMultilineField(f) && !isSenha;
+
     return TextField(
       controller: _ctrls[f.column],
       focusNode: (_isDespesaVariavel && f.column == 'valormensal') ? _dvValorMensalFocusNode : null,
       readOnly: readOnly,
       obscureText: isSenha ? obscure : false,
-      keyboardType: keyboardType,
+      minLines: multiline ? 3 : null,
+      maxLines: multiline ? 6 : 1,
+      textInputAction: multiline ? TextInputAction.newline : null,
+      keyboardType: multiline ? TextInputType.multiline : keyboardType,
       textCapitalization: isEmail ? TextCapitalization.none : TextCapitalization.sentences,
       autocorrect: !isEmail,
       enableSuggestions: !isEmail,
@@ -2171,7 +2180,9 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
           continue;
         }
         final rawInput = _ctrls[f.column]!.text;
-        final raw = _shouldNormalizeCadastroText(f) ? normalizeCollapsedSpaces(rawInput) : rawInput.trim();
+        final raw = _isMultilineField(f)
+            ? normalizeMultilineText(rawInput) // mantém as quebras de linha
+            : (_shouldNormalizeCadastroText(f) ? normalizeCollapsedSpaces(rawInput) : rawInput.trim());
 
         // Compra / CompraItem: date parsing (dd/MM/yyyy -> yyyy-MM-dd)
         if (_isCompra && f.column == 'datacompra') {

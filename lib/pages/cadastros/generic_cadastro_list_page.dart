@@ -735,7 +735,10 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
 
     // Keep the same behavior for other cadastros that need to refresh derived
     // data after returning from nested flows.
-    if (widget.definition.keyName == 'produto' || widget.definition.keyName == 'item') {
+    // Produto e Kit NÃO entram aqui: a lista já recarrega explicitamente ao voltar da
+    // tela de edição (await context.push(...) + _load em _openEdit/_openCreate).
+    // Recarregar também aqui fazia a lista carregar duas vezes seguidas.
+    if (widget.definition.keyName == 'item') {
       _load();
     }
   }
@@ -1594,7 +1597,10 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       final id = result[widget.definition.idColumn];
       if (id is num) {
         if (!mounted) return;
-        context.push('/cadastros/produto/$id');
+        // As telas de cadastro ficam no navegador do menu lateral (ShellRoute), que o
+        // RouteObserver não acompanha: por isso recarregamos explicitamente ao voltar.
+        await context.push('/cadastros/produto/$id');
+        if (mounted) await _load();
       }
     }
 
@@ -1602,7 +1608,10 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       final id = result[widget.definition.idColumn];
       if (id is num) {
         if (!mounted) return;
-        context.push('/cadastros/kit/$id');
+        // As telas de cadastro ficam no navegador do menu lateral (ShellRoute), que o
+        // RouteObserver não acompanha: por isso recarregamos explicitamente ao voltar.
+        await context.push('/cadastros/kit/$id');
+        if (mounted) await _load();
       }
     }
   }
@@ -1641,7 +1650,9 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
     if (widget.definition.keyName == 'produto') {
       final id = row[widget.definition.idColumn];
       if (id is num) {
-        context.push('/cadastros/produto/$id');
+        // Recarrega a lista ao voltar da tela de edição (descrição, classificação, itens...).
+        await context.push('/cadastros/produto/$id');
+        if (mounted) await _load();
         return;
       }
     }
@@ -1649,7 +1660,9 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
     if (widget.definition.keyName == 'kit') {
       final id = row[widget.definition.idColumn];
       if (id is num) {
-        context.push('/cadastros/kit/$id');
+        // Recarrega a lista ao voltar da tela de edição (descrição, classificação, itens...).
+        await context.push('/cadastros/kit/$id');
+        if (mounted) await _load();
         return;
       }
     }
@@ -2565,9 +2578,10 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
     //
     // - Receita: ensure backend-triggered totals (`custototalingrediente`, etc.)
     //   refresh when coming back from Ingredientes/Materiais.
-    // - Produto: ensure computed "custo de produção" refreshes when coming back
-    //   from the Produto cascade page (Produto -> ProdutoReceita).
-    if (widget.definition.keyName == 'receita' || widget.definition.keyName == 'produto' || widget.definition.keyName == 'item') {
+    // - Produto: NÃO entra aqui. A lista já recarrega explicitamente ao voltar da
+    //   tela do produto (await context.push + _load); recarregar também no foco
+    //   fazia a lista carregar duas vezes seguidas.
+    if (widget.definition.keyName == 'receita' || widget.definition.keyName == 'item') {
       content = Focus(
         autofocus: true,
         onFocusChange: (hasFocus) {
@@ -3510,9 +3524,9 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
   @override
   void didUpdateWidget(covariant _KitInlineInfoRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final oldId = oldWidget.row['kitid'];
-    final newId = widget.row['kitid'];
-    if (oldId != newId) _prime();
+    // Recarrega os totais quando a linha muda (outro kit ou lista recarregada do banco,
+    // ex.: ao voltar da tela de edição do kit com produtos/embalagens alterados).
+    if (!identical(oldWidget.row, widget.row)) _prime();
   }
 
   void _prime() {
@@ -3533,33 +3547,7 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
     final cs = Theme.of(context).colorScheme;
     final desc = widget.row['descricao']?.toString().trim();
 
-    Widget descriptionChip() {
-      if (desc == null || desc.isEmpty) return const SizedBox.shrink();
-      return Container(
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: cs.outline.withValues(alpha: 0.12)),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.inventory_2_rounded, size: 16, color: cs.onSurfaceVariant),
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 360),
-              child: Text(
-                desc,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.25),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    Widget descriptionChip() => _DescricaoChip(texto: desc);
 
     final future = _future;
     Widget totalsRow() {
@@ -3680,6 +3668,46 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
         if (hasDesc) const SizedBox(height: 6),
         totalsRow(),
       ],
+    );
+  }
+}
+
+/// Descrição completa (kit/produto) em um card abaixo do nome: quebra em várias
+/// linhas e mantém as quebras de linha digitadas.
+class _DescricaoChip extends StatelessWidget {
+  const _DescricaoChip({required this.texto});
+  final String? texto;
+
+  @override
+  Widget build(BuildContext context) {
+    final desc = texto?.trim();
+    if (desc == null || desc.isEmpty) return const SizedBox.shrink();
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: cs.outline.withValues(alpha: 0.12)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(Icons.inventory_2_rounded, size: 16, color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              desc,
+              softWrap: true,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.25),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -4128,9 +4156,28 @@ class _RowCard extends StatelessWidget {
                   else if (isDespesaVariavel)
                     const SizedBox.shrink()
                   else if (isReceita)
-                    _ReceitaInlineCostsRow(row: row)
+                    // Receita: descrição completa abaixo do nome (mesmo padrão de kit/produto).
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if ((row['descricao']?.toString().trim() ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          _DescricaoChip(texto: row['descricao']?.toString()),
+                        ],
+                        _ReceitaInlineCostsRow(row: row),
+                      ],
+                    )
                   else if (isProduto)
-                    _ProdutoInlineInfoPills(row: row)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if ((row['descricao']?.toString().trim() ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          _DescricaoChip(texto: row['descricao']?.toString()),
+                        ],
+                        _ProdutoInlineInfoPills(row: row),
+                      ],
+                    )
                   else if (isKit)
                     _KitInlineInfoRow(row: row, impostoPct: kitImpostoPct, taxaMotoboyPct: kitTaxaMotoboyPct, deliveries: kitDeliveries)
                   else if (subtitleText != null && subtitleText.isNotEmpty)

@@ -191,7 +191,6 @@ class _ProdutoCascadePageState extends State<ProdutoCascadePage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final produtoNome = (_produto?['nome'] ?? 'Produto').toString();
     final custoProducao = _calcCustoProducao(_produtoReceitas);
 
     return SafeArea(
@@ -208,7 +207,8 @@ class _ProdutoCascadePageState extends State<ProdutoCascadePage> {
                   tooltip: 'Voltar',
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                Expanded(child: Text(produtoNome, style: Theme.of(context).textTheme.headlineSmall)),
+                // Mesmo padrão da tela do kit: título fixo (o nome do produto já aparece no card abaixo).
+                Expanded(child: Text('Produto', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
                 const SizedBox(width: AppSpacing.sm),
                 OutlinedButton.icon(
                   onPressed: _loading ? null : _load,
@@ -668,6 +668,7 @@ class _ProdutoHeaderCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final nome = (produto['nome'] ?? 'Produto').toString();
     final codigo = (produto['codigo'] ?? '').toString();
+    final descricao = (produto['descricao'] ?? '').toString().trim();
 
     final categoriaNome = ((produto['categoria'] as Map?)?['nome'] ?? '').toString().trim();
     final custoTotalReceitasRaw =
@@ -696,6 +697,14 @@ class _ProdutoHeaderCard extends StatelessWidget {
                 ),
               ],
             ),
+            // Descrição completa (mantém as quebras de linha digitadas).
+            if (descricao.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                descricao,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.25),
+              ),
+            ],
             const SizedBox(height: AppSpacing.sm),
             Wrap(
               spacing: AppSpacing.sm,

@@ -747,10 +747,9 @@ class _KitHeaderCard extends StatelessWidget {
                       ),
                       if (descricao.isNotEmpty) ...[
                         const SizedBox(height: 6),
+                        // Descrição completa (mantém as quebras de linha digitadas).
                         Text(
                           descricao,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.25),
                         ),
                       ],

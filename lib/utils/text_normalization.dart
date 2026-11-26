@@ -15,6 +15,22 @@ String normalizeCollapsedSpaces(String input) {
   return trimmed.replaceAll(RegExp(r'\s+'), ' ');
 }
 
+/// Versão para textos de várias linhas (ex.: Descrição): limpa espaços extras
+/// dentro de cada linha, mas MANTÉM as quebras de linha. Remove linhas vazias
+/// no início/fim e junta várias linhas vazias seguidas numa só.
+String normalizeMultilineText(String input) {
+  final linhas = input.replaceAll('\r\n', '\n').split('\n').map(normalizeCollapsedSpaces).toList();
+  final out = <String>[];
+  for (final l in linhas) {
+    if (l.isEmpty && (out.isEmpty || out.last.isEmpty)) continue;
+    out.add(l);
+  }
+  while (out.isNotEmpty && out.last.isEmpty) {
+    out.removeLast();
+  }
+  return out.join('\n');
+}
+
 /// Lowercased version of [normalizeCollapsedSpaces], useful for case-insensitive comparisons.
 String normalizeCollapsedSpacesLower(String input) => normalizeCollapsedSpaces(input).toLowerCase();
 
