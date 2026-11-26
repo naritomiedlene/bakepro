@@ -4,6 +4,14 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+/// Um grupo de linhas no relatório (ex.: uma categoria), com título e informação opcional.
+class RelatorioPdfGrupo {
+  const RelatorioPdfGrupo({required this.titulo, this.info, required this.data});
+  final String titulo;
+  final String? info;
+  final List<List<String>> data;
+}
+
 /// Base comum dos relatórios PDF do BakePro: fonte, logo, cabeçalho, rodapé
 /// e uma tabela simples. Cada relatório só informa títulos, filtros e dados.
 class RelatorioPdfBase {
@@ -44,7 +52,10 @@ class RelatorioPdfBase {
     required String titulo,
     required List<String> infoLinhas,
     required List<String> headers,
-    required List<List<String>> data,
+    List<List<String>> data = const [],
+    /// Quando informado, a tabela é dividida em grupos (título + tabela de cada grupo)
+    /// e [data] é ignorado.
+    List<RelatorioPdfGrupo>? grupos,
     Set<int> colunasEsquerda = const {0},
     Map<int, pw.TableColumnWidth>? larguras,
     String mensagemVazio = 'Nenhum registro encontrado para o filtro selecionado.',
@@ -53,6 +64,24 @@ class RelatorioPdfBase {
   }) async {
     final theme = await _tema();
     final logoSvg = await _logoSvg();
+
+    pw.Widget tabela(List<List<String>> linhas) => pw.TableHelper.fromTextArray(
+          headers: headers,
+          data: linhas,
+          headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+          headerDecoration: const pw.BoxDecoration(color: PdfColors.brown700),
+          cellStyle: const pw.TextStyle(fontSize: 9),
+          oddRowDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
+          cellAlignment: pw.Alignment.centerRight,
+          cellAlignments: {for (final i in colunasEsquerda) i: pw.Alignment.centerLeft},
+          // Toda coluna sem largura definida fica proporcional (Flex 1); misturar com
+          // colunas "do tamanho do conteúdo" fazia colunas de texto sumirem.
+          columnWidths: {
+            for (var i = 0; i < headers.length; i++) i: larguras?[i] ?? const pw.FlexColumnWidth(1),
+          },
+        );
+
+    final semDados = grupos == null ? data.isEmpty : grupos.every((g) => g.data.isEmpty);
 
     final doc = pw.Document(theme: theme, title: titulo, author: 'BakePro');
     doc.addPage(
@@ -87,24 +116,31 @@ class RelatorioPdfBase {
               style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
         ),
         build: (context) => [
-          if (data.isEmpty)
+          if (semDados)
             pw.Padding(padding: const pw.EdgeInsets.only(top: 24), child: pw.Text(mensagemVazio))
+          else if (grupos == null)
+            tabela(data)
           else
-            pw.TableHelper.fromTextArray(
-              headers: headers,
-              data: data,
-              headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.brown700),
-              cellStyle: const pw.TextStyle(fontSize: 9),
-              oddRowDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
-              cellAlignment: pw.Alignment.centerRight,
-              cellAlignments: {for (final i in colunasEsquerda) i: pw.Alignment.centerLeft},
-              // Toda coluna sem largura definida fica proporcional (Flex 1); misturar com
-              // colunas "do tamanho do conteúdo" fazia colunas de texto sumirem.
-              columnWidths: {
-                for (var i = 0; i < headers.length; i++) i: larguras?[i] ?? const pw.FlexColumnWidth(1),
-              },
-            ),
+            for (final g in grupos.where((g) => g.data.isNotEmpty)) ...[
+              // Título do grupo (ex.: categoria) + informações do grupo.
+              pw.Container(
+                margin: const pw.EdgeInsets.only(top: 10, bottom: 4),
+                padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: const pw.BoxDecoration(color: PdfColors.green700),
+                child: pw.Row(
+                  children: [
+                    pw.Text(g.titulo, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                    if (g.info != null) ...[
+                      pw.SizedBox(width: 12),
+                      pw.Expanded(
+                        child: pw.Text(g.info!, style: const pw.TextStyle(fontSize: 9, color: PdfColors.white)),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              tabela(g.data),
+            ],
           if (notaFinal != null) ...[
             pw.SizedBox(height: 10),
             pw.Text(notaFinal, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),

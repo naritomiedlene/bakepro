@@ -5,6 +5,7 @@ import 'package:bakepro/services/kit_service.dart';
 import 'package:bakepro/services/relatorios/item_pdf_report.dart';
 import 'package:bakepro/services/relatorios/kit_pdf_report.dart';
 import 'package:pdf/pdf.dart' show PdfPageFormat;
+import 'package:bakepro/components/info_pill.dart';
 import 'package:bakepro/components/pdf_preview_dialog.dart';
 import 'package:bakepro/services/totaldespesas_service.dart';
 import 'package:bakepro/services/fk_delete_guard.dart';
@@ -3690,6 +3691,64 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
   }
 }
 
+/// Produto: dados em cards numa única linha (encolhe para caber em telas estreitas).
+class _ProdutoInlineInfoPills extends StatelessWidget {
+  const _ProdutoInlineInfoPills({required this.row});
+
+  final Map<String, dynamic> row;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    final codigo = row['codigo']?.toString().trim();
+    final categoria = row['categoria'];
+    final categoriaNome = categoria is Map ? categoria['nome']?.toString().trim() : null;
+    final custoProducao = parsePtBrNumber(row['_custo_producao']);
+    final qtd = parsePtBrNumber(row['qtdproduzida']);
+    final qtdTxt = qtd == null ? null : (qtd == qtd.roundToDouble() ? qtd.toInt().toString() : formatPtBrMoney(qtd));
+
+    final pills = <Widget>[
+      if (codigo != null && codigo.isNotEmpty)
+        _InlineInfoPill(icon: Icons.tag_rounded, label: 'Código', value: codigo, colorScheme: cs),
+      if (categoriaNome != null && categoriaNome.isNotEmpty)
+        _InlineInfoPill(
+          icon: Icons.category_rounded,
+          label: 'Categoria',
+          value: categoriaNome,
+          colorScheme: cs,
+          backgroundColor: Colors.green.shade700,
+          foregroundColor: Colors.white,
+        ),
+      if (custoProducao != null)
+        _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo de produção', value: formatPtBrCurrency(custoProducao), colorScheme: cs),
+      if (qtdTxt != null)
+        _InlineInfoPill(icon: Icons.inventory_rounded, label: 'Qtd produzida', value: qtdTxt, colorScheme: cs),
+    ];
+    if (pills.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < pills.length; i++) ...[
+                if (i > 0) const SizedBox(width: AppSpacing.sm),
+                pills[i],
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Delivery ativo da empresa (empresadelivery + delivery.nome) usado na lista de kits.
 class _KitDelivery {
   const _KitDelivery({required this.nome, this.taxaPct});
@@ -3697,6 +3756,7 @@ class _KitDelivery {
   final num? taxaPct;
 }
 
+/// Mantido por compatibilidade: delega ao componente compartilhado [InfoPill].
 class _InlineInfoPill extends StatelessWidget {
   const _InlineInfoPill({
     this.icon,
@@ -3713,50 +3773,18 @@ class _InlineInfoPill extends StatelessWidget {
   final String value;
   final ColorScheme colorScheme;
   final bool emphasize;
-
-  /// Cores opcionais (ex.: card de classificação em verde). Sobrepõem o padrão.
   final Color? backgroundColor;
   final Color? foregroundColor;
 
   @override
-  Widget build(BuildContext context) {
-    final bg = backgroundColor ??
-        (emphasize ? colorScheme.primary.withValues(alpha: 0.10) : colorScheme.surfaceContainerHighest.withValues(alpha: 0.55));
-    final fg = foregroundColor ?? (emphasize ? colorScheme.primary : colorScheme.onSurfaceVariant);
-    final labelColor = foregroundColor ?? colorScheme.onSurfaceVariant;
-    final valueColor = foregroundColor ?? colorScheme.onSurface;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.28)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 16, color: fg),
-              const SizedBox(width: 8),
-            ],
-            Text(
-              '$label: ',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(color: labelColor, fontWeight: FontWeight.w700),
-            ),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(color: valueColor, fontWeight: FontWeight.w800),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => InfoPill(
+        icon: icon,
+        label: label,
+        value: value,
+        emphasize: emphasize,
+        backgroundColor: backgroundColor,
+        foregroundColor: foregroundColor,
+      );
 }
 
 class _RowCard extends StatelessWidget {
@@ -4104,6 +4132,8 @@ class _RowCard extends StatelessWidget {
                     const SizedBox.shrink()
                   else if (isReceita)
                     _ReceitaInlineCostsRow(row: row)
+                  else if (isProduto)
+                    _ProdutoInlineInfoPills(row: row)
                   else if (isKit)
                     _KitInlineInfoRow(row: row, impostoPct: kitImpostoPct, taxaMotoboyPct: kitTaxaMotoboyPct, deliveries: kitDeliveries)
                   else if (subtitleText != null && subtitleText.isNotEmpty)

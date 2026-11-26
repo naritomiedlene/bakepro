@@ -80,9 +80,13 @@ class _AppBarBranding extends StatelessWidget {
         const reservedLeft = 56.0; // largura típica do leading/menu
         const reservedRight = 240.0 + AppSpacing.sm * 2; // maxWidth do chip + padding lateral
 
-        final availableWidth = (constraints.maxWidth - reservedLeft - reservedRight).clamp(120.0, constraints.maxWidth);
+        // Em telas estreitas o limite máximo pode ficar menor que o mínimo; clamp(min, max)
+        // com min > max lança "Invalid argument". Por isso o mínimo nunca passa do máximo.
+        final minWidth = constraints.maxWidth < 120.0 ? constraints.maxWidth : 120.0;
+        final availableWidth = (constraints.maxWidth - reservedLeft - reservedRight).clamp(minWidth, constraints.maxWidth);
         final maxHeightFromWidth = availableWidth / _svgAspect;
-        final computedHeight = _snapToPhysicalPixels(targetLogoHeight.clamp(40.0, maxHeightFromWidth), dpr);
+        final minHeight = maxHeightFromWidth < 40.0 ? maxHeightFromWidth : 40.0;
+        final computedHeight = _snapToPhysicalPixels(targetLogoHeight.clamp(minHeight, maxHeightFromWidth), dpr);
 
         final topInset = (constraints.maxHeight - computedHeight) / 2;
         // Pequeno “slack” para o chip não ficar visualmente mais alto que o respiro do logo.

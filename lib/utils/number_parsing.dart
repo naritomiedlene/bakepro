@@ -27,6 +27,24 @@ double? parsePtBrNumber(dynamic raw) {
 /// Example: 10.12 -> "10,12"
 String formatPtBrMoney(num value, {int decimalDigits = 2}) => value.toStringAsFixed(decimalDigits).replaceAll('.', ',');
 
-/// Formats a numeric value as pt-BR currency.
-/// Example: 10.12 -> "R$ 10,12"
-String formatPtBrCurrency(num value, {int decimalDigits = 2}) => 'R\$ ${formatPtBrMoney(value, decimalDigits: decimalDigits)}';
+/// Formata em pt-BR com separador de milhar (ponto) e decimal (vírgula).
+/// Example: 1234567.891 -> "1.234.567,89"
+String formatPtBrMoneyThousands(num value, {int decimalDigits = 2}) {
+  final fixed = value.abs().toStringAsFixed(decimalDigits);
+  // Evita "-0,00" quando o valor negativo arredonda para zero.
+  final negative = value < 0 && RegExp(r'[1-9]').hasMatch(fixed);
+  final parts = fixed.split('.');
+  final intPart = parts[0];
+  final buf = StringBuffer();
+  for (var i = 0; i < intPart.length; i++) {
+    if (i > 0 && (intPart.length - i) % 3 == 0) buf.write('.');
+    buf.write(intPart[i]);
+  }
+  final decPart = parts.length > 1 ? ',${parts[1]}' : '';
+  return '${negative ? '-' : ''}$buf$decPart';
+}
+
+/// Formats a numeric value as pt-BR currency, com separador de milhar.
+/// Somente para exibição (não usar como valor inicial de campos editáveis).
+/// Example: 1234.5 -> "R$ 1.234,50"
+String formatPtBrCurrency(num value, {int decimalDigits = 2}) => 'R\$ ${formatPtBrMoneyThousands(value, decimalDigits: decimalDigits)}';

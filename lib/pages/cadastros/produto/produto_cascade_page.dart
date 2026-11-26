@@ -1,6 +1,7 @@
 import 'package:bakepro/pages/cadastros/cadastro_definitions.dart';
 import 'package:bakepro/pages/cadastros/generic_cadastro_form_sheet.dart';
 import 'package:bakepro/components/confirm_delete_sheet.dart';
+import 'package:bakepro/components/info_pill.dart';
 import 'package:bakepro/supabase/supabase_config.dart';
 import 'package:bakepro/theme.dart';
 import 'package:bakepro/utils/number_parsing.dart';
@@ -287,21 +288,30 @@ class _ProdutoReceitaCardState extends State<ProdutoReceitaCard> {
     final qtdText = qtd == null ? (widget.prRow['quantidadereceita']?.toString() ?? '-') : formatPtBrMoney(qtd, decimalDigits: 4);
 
     final unidadeText = (unidade == null || unidade.trim().isEmpty) ? null : unidade.trim();
-    final parts = <String>[];
-    parts.add(unidadeText == null ? 'Qtd da receita no produto: $qtdText' : 'Qtd da receita no produto: $qtdText ($unidadeText)');
-    if (custoReceita != null) parts.add('Custo total da receita: ${formatPtBrCurrency(custoReceita)}');
-    if (qtdTotalReceita != null) {
-      final qtdTotalText = qtdTotalReceita % 1 == 0 ? qtdTotalReceita.toStringAsFixed(0) : formatPtBrMoney(qtdTotalReceita, decimalDigits: 4);
-      parts.add(unidadeText == null ? 'Quantidade total da receita: $qtdTotalText' : 'Quantidade total da receita: $qtdTotalText ($unidadeText)');
-    }
+    String comUnidade(String v) => unidadeText == null ? v : '$v ($unidadeText)';
 
     // Custo total da receita no produto (rateio pela quantidade total da receita)
     // Fórmula: produtoreceita.quantidadereceita * receita.custoreceita / receita.qtdreceita
-    if (qtd != null && custoReceita != null && qtdTotalReceita != null && qtdTotalReceita != 0) {
-      final custoNoProduto = (qtd * custoReceita) / qtdTotalReceita;
-      parts.add('Custo total da receita no produto: ${formatPtBrCurrency(custoNoProduto)}');
-    }
-    final subtitle = parts.join(' • ');
+    final custoNoProduto = (qtd != null && custoReceita != null && qtdTotalReceita != null && qtdTotalReceita != 0)
+        ? (qtd * custoReceita) / qtdTotalReceita
+        : null;
+    final qtdTotalText = qtdTotalReceita == null
+        ? null
+        : (qtdTotalReceita % 1 == 0 ? qtdTotalReceita.toStringAsFixed(0) : formatPtBrMoney(qtdTotalReceita, decimalDigits: 4));
+
+    final pills = <Widget>[
+      InfoPill(icon: Icons.scale_rounded, label: 'Qtd no produto', value: comUnidade(qtdText)),
+      if (custoReceita != null)
+        InfoPill(icon: Icons.receipt_long_rounded, label: 'Custo total da receita', value: formatPtBrCurrency(custoReceita)),
+      if (qtdTotalText != null) InfoPill(icon: Icons.inventory_rounded, label: 'Qtd total da receita', value: comUnidade(qtdTotalText)),
+      if (custoNoProduto != null)
+        InfoPill(
+          icon: Icons.request_quote_rounded,
+          label: 'Custo no produto',
+          value: formatPtBrCurrency(custoNoProduto),
+          emphasize: true,
+        ),
+    ];
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -332,8 +342,8 @@ class _ProdutoReceitaCardState extends State<ProdutoReceitaCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(receitaName, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 4),
-                    Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                    const SizedBox(height: 6),
+                    Wrap(spacing: AppSpacing.sm, runSpacing: 6, children: pills),
                   ],
                 ),
               ),
@@ -663,14 +673,7 @@ class _ProdutoHeaderCard extends StatelessWidget {
     final custoTotalReceitasRaw =
         produto['custototalreceita'] ?? produto['custototalreceitas'] ?? produto['custototaldasreceitas'];
     final custoTotalReceitasNum = parsePtBrNumber(custoTotalReceitasRaw);
-    final custoTotalReceitasText =
-        custoTotalReceitasNum == null ? '' : 'Custo total das receitas: ${formatPtBrMoney(custoTotalReceitasNum)}';
-    final custoProducaoText = 'Custo de produção: ${formatPtBrCurrency(custoProducao)}';
-
     final qtdProduzidaText = _formatPtBrCompactNumber(produto['qtdproduzida']);
-    final qtdProduzidaPill = (qtdProduzidaText == null || qtdProduzidaText.trim().isEmpty)
-        ? ''
-        : 'Qtd produzida: $qtdProduzidaText';
     return DecoratedBox(
       decoration: BoxDecoration(
         color: cs.surface,
@@ -698,36 +701,24 @@ class _ProdutoHeaderCard extends StatelessWidget {
               spacing: AppSpacing.sm,
               runSpacing: 6,
               children: [
-                if (codigo.trim().isNotEmpty) _Pill(text: 'Código: $codigo'),
-                if (categoriaNome.isNotEmpty) _Pill(text: 'Categoria: $categoriaNome'),
-                _Pill(text: custoProducaoText),
-                if (qtdProduzidaPill.isNotEmpty) _Pill(text: qtdProduzidaPill),
-                if (custoTotalReceitasText.isNotEmpty) _Pill(text: custoTotalReceitasText),
+                if (codigo.trim().isNotEmpty) InfoPill(icon: Icons.tag_rounded, label: 'Código', value: codigo.trim()),
+                if (categoriaNome.isNotEmpty)
+                  InfoPill(
+                    icon: Icons.category_rounded,
+                    label: 'Categoria',
+                    value: categoriaNome,
+                    backgroundColor: InfoPill.verde,
+                    foregroundColor: Colors.white,
+                  ),
+                InfoPill(icon: Icons.request_quote_rounded, label: 'Custo de produção', value: formatPtBrCurrency(custoProducao)),
+                if (qtdProduzidaText != null && qtdProduzidaText.trim().isNotEmpty)
+                  InfoPill(icon: Icons.inventory_rounded, label: 'Qtd produzida', value: qtdProduzidaText),
+                if (custoTotalReceitasNum != null)
+                  InfoPill(icon: Icons.receipt_long_rounded, label: 'Custo total das receitas', value: formatPtBrCurrency(custoTotalReceitasNum)),
               ],
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: cs.outline.withValues(alpha: 0.12)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Text(text, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
       ),
     );
   }
