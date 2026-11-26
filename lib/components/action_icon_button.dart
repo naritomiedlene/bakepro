@@ -1,7 +1,7 @@
 import 'package:bakepro/theme.dart';
 import 'package:flutter/material.dart';
 
-enum _ActionKind { edit, delete, ingredientes, materiais }
+enum _ActionKind { edit, delete, ingredientes, materiais, observacao }
 
 /// Botões de ação padrão do app.
 ///
@@ -10,7 +10,8 @@ enum _ActionKind { edit, delete, ingredientes, materiais }
 /// - editar (lápis): primária (terracota);
 /// - excluir (lixeira): erro (vermelho);
 /// - ingredientes da receita: terciária (verde-azulado);
-/// - materiais da receita: âmbar.
+/// - materiais da receita: âmbar;
+/// - observação do item: fundo azul-petróleo, ícone dourado-mel (bloco de notas).
 /// Use sempre estes construtores em vez de `IconButton` solto.
 class AppActionIconButton extends StatelessWidget {
   const AppActionIconButton._(this._kind, {required this.icon, required this.tooltip, required this.onPressed});
@@ -30,6 +31,10 @@ class AppActionIconButton extends StatelessWidget {
   /// Receita: abre os materiais de preparo.
   const AppActionIconButton.materiais({required VoidCallback? onPressed, String tooltip = 'Materiais'})
       : this._(_ActionKind.materiais, icon: Icons.all_inbox_outlined, tooltip: tooltip, onPressed: onPressed);
+
+  /// Bloco de notas: mostra a observação do registro (só exibir quando houver).
+  const AppActionIconButton.observacao({required VoidCallback? onPressed, String tooltip = 'Ver observação'})
+      : this._(_ActionKind.observacao, icon: Icons.sticky_note_2_outlined, tooltip: tooltip, onPressed: onPressed);
 
   final _ActionKind _kind;
   final IconData icon;
@@ -51,6 +56,9 @@ class AppActionIconButton extends StatelessWidget {
           final c = isDark ? AppStatusColors.materiaisActionDark : AppStatusColors.materiaisActionLight;
           return (c, c.withValues(alpha: 0.20));
         }(),
+      // Fundo azul-petróleo com ícone dourado-mel (tom claro, para contraste
+      // sobre o fundo escuro do botão nos dois temas).
+      _ActionKind.observacao => (AppStatusColors.observacaoActionDark, AppStatusColors.observacaoBackground),
     };
 
     return IconButton(

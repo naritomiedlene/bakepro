@@ -20,7 +20,7 @@ class InfoPill extends StatelessWidget {
   final String value;
   final bool emphasize;
 
-  /// Valor calculado pelo app (custos, totais, preço calculado...): card verde
+  /// Valor calculado pelo app (custos, totais, preço calculado...): card ameixa
   /// padrão ([AppStatusColors.calculatedValueBackground]) com texto branco.
   final bool calculated;
 
@@ -48,7 +48,7 @@ class InfoPill extends StatelessWidget {
     final fg = foregroundColor ?? (emphasize ? colorScheme.primary : colorScheme.onSurfaceVariant);
     final labelColor = foregroundColor ?? colorScheme.onSurfaceVariant;
     final valueColor = foregroundColor ?? colorScheme.onSurface;
-    // Padronização: todos os cards (marrons e verdes) com fonte de peso normal.
+    // Padronização: todos os cards (marrons e coloridos) com fonte de peso normal.
     // Antes w700 (rótulo) / w800 (valor), que ficavam carregados demais.
     const labelWeight = FontWeight.normal;
     const valueWeight = FontWeight.normal;

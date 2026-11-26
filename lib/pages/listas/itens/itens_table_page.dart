@@ -1,3 +1,4 @@
+import 'package:bakepro/components/observacao_dialog.dart';
 import 'package:bakepro/components/action_icon_button.dart';
 import 'package:bakepro/components/count_badge.dart';
 import 'package:bakepro/components/info_pill.dart';
@@ -562,7 +563,7 @@ class _ItemCard extends StatelessWidget {
     bool has(String s) => s.isNotEmpty && s != 'null';
 
     // Padrão das listas de cadastro: card com nome + lápis na 1ª linha e os
-    // dados em cards (InfoPill) na 2ª; custo (calculado) no verde padrão.
+    // dados em cards (InfoPill) na 2ª; custo (calculado) no ameixa padrão.
     return DecoratedBox(
       decoration: BoxDecoration(
         color: cs.surface,
@@ -586,6 +587,17 @@ class _ItemCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
+                // Observação (bloco de notas) só quando o item tiver texto em `obs`.
+                if (observacaoDe(row) != null) ...[
+                  AppActionIconButton.observacao(
+                    onPressed: () => showObservacaoDialog(
+                      context,
+                      titulo: nome.isEmpty ? 'Observação' : nome,
+                      texto: observacaoDe(row)!,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 AppActionIconButton.edit(onPressed: onTap),
               ],
             ),

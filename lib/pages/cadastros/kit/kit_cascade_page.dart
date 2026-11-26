@@ -839,7 +839,7 @@ class _InfoMetricCard extends StatelessWidget {
   final String label;
   final String value;
 
-  /// Valor calculado pelo app: card verde padrão, texto branco e fonte normal.
+  /// Valor calculado pelo app: card ameixa padrão, texto branco e fonte normal.
   final bool calculated;
 
   @override
@@ -1104,7 +1104,7 @@ class _InlineValuePill extends StatelessWidget {
   final String label;
   final String value;
 
-  /// Valor calculado pelo app: card verde padrão, texto branco e fonte normal.
+  /// Valor calculado pelo app: card ameixa padrão, texto branco e fonte normal.
   final bool calculated;
 
   @override
@@ -1165,7 +1165,7 @@ class _InlineMetricPill extends StatelessWidget {
   final Color? backgroundColor;
   final Color? borderColor;
 
-  /// Valor calculado pelo app: card verde padrão, texto branco e fonte normal.
+  /// Valor calculado pelo app: card ameixa padrão, texto branco e fonte normal.
   /// Cores explícitas (ex.: alerta vermelho de lucro abaixo da margem) têm prioridade.
   final bool calculated;
 

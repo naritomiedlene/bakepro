@@ -1198,7 +1198,7 @@ class _Metric extends StatelessWidget {
   final FontWeight? valueWeight;
   final bool dense;
 
-  /// Valor calculado pelo app: card verde padrão com texto branco (ignora as cores
+  /// Valor calculado pelo app: card ameixa padrão com texto branco (ignora as cores
   /// de rótulo/valor, que não teriam contraste sobre o verde).
   final bool calculated;
 
@@ -1256,7 +1256,7 @@ class _Metric extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: (dense ? theme.textTheme.titleSmall : theme.textTheme.titleMedium)?.copyWith(
-                    // Peso normal (mesma leveza dos cards verdes); antes w800.
+                    // Peso normal (mesma leveza dos cards coloridos); antes w800.
                     fontWeight: valueWeight ?? FontWeight.normal,
                     color: valueColor ?? cs.onSurface,
                     height: 1.0,

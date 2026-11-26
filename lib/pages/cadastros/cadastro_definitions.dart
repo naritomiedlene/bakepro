@@ -440,6 +440,8 @@ class Cadastros {
         // Usado em receitas, kits, despesas variáveis e importação de compras.
         // Calculado no formulário: valorcompra / (qtdecomprada * fatorconversao); não editável.
         CadastroField(column: 'custounitario', label: 'Custo unitário', type: CadastroFieldType.number, required: false),
+        // Observações livres sobre o item (várias linhas; opcional).
+        CadastroField(column: 'obs', label: 'Observação', type: CadastroFieldType.text, required: false),
       ],
     ),
     CadastroDefinition(

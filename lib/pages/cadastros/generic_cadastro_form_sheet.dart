@@ -349,7 +349,8 @@ class DespesaVariavelItemDetailsCard extends StatelessWidget {
 class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
 
   /// Campos de texto longo exibidos em várias linhas (hoje: Descrição de Kit, Produto e Receita).
-  bool _isMultilineField(CadastroField f) => f.type == CadastroFieldType.text && f.column.toLowerCase() == 'descricao';
+  bool _isMultilineField(CadastroField f) =>
+      f.type == CadastroFieldType.text && const {'descricao', 'obs'}.contains(f.column.toLowerCase());
 
   bool _shouldNormalizeCadastroText(CadastroField f) {
     // Only normalize free text fields.
@@ -1421,7 +1422,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     return s;
   }
 
-  /// Linha do Valor da compra: campo + card verde do custo unitário ao lado,
+  /// Linha do Valor da compra: campo + card ameixa do custo unitário ao lado,
   /// para ver o custo sem rolar o formulário.
   Widget _buildItemValorCompraRow(BuildContext context, CadastroField f) {
     return Row(
@@ -1435,7 +1436,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     );
   }
 
-  /// Item: custo unitário calculado, exibido como card verde (não editável).
+  /// Item: custo unitário calculado, exibido como card ameixa (não editável).
   /// O valor continua no controller `custounitario` e é recalculado no save.
   Widget _buildItemCustoUnitarioCard(BuildContext context) {
     final t = Theme.of(context).textTheme;
@@ -1489,7 +1490,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     if (convertida == null) return Row(children: [Expanded(child: field)]);
 
     final t = Theme.of(context).textTheme;
-    // Valor calculado (qtde × fator): card verde padrão, texto branco.
+    // Valor calculado (qtde × fator): card ameixa padrão, texto branco.
     const fg = AppStatusColors.onCalculatedValue;
     final unidade = _itemUnidadeLabel('unidadeid');
     final label = unidade == null ? 'Qtde comprada' : 'Qtde comprada ($unidade)';
@@ -1963,6 +1964,8 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       obscureText: isSenha ? obscure : false,
       minLines: multiline ? 3 : null,
       maxLines: multiline ? 6 : 1,
+      // Observação: coluna varchar(500) no banco; o contador mostra o limite.
+      maxLength: f.column.toLowerCase() == 'obs' ? 500 : null,
       textInputAction: multiline ? TextInputAction.newline : null,
       keyboardType: multiline ? TextInputType.multiline : keyboardType,
       textCapitalization: isEmail ? TextCapitalization.none : TextCapitalization.sentences,
@@ -2485,6 +2488,12 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
         if (f.required && raw.isEmpty) {
           _failSave('Preencha: ${f.label}');
           return;
+        }
+        // Texto longo opcional (Observação/Descrição) apagado na edição: grava null,
+        // senão o texto antigo continuaria no banco.
+        if (raw.isEmpty && _isEdit && _isMultilineField(f)) {
+          data[f.column] = null;
+          continue;
         }
         if (raw.isEmpty) continue;
 

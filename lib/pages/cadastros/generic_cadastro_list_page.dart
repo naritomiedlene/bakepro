@@ -1,3 +1,4 @@
+import 'package:bakepro/components/observacao_dialog.dart';
 import 'package:bakepro/components/count_badge.dart';
 import 'package:bakepro/components/action_icon_button.dart';
 import 'package:bakepro/pages/cadastros/cadastro_definitions.dart';
@@ -2675,7 +2676,7 @@ class _TotalDespesaVariavelLine extends StatelessWidget {
     final value = (total == null || total!.trim().isEmpty) ? '0,00' : total!.trim();
     return DecoratedBox(
       decoration: BoxDecoration(
-        // Total calculado pelo app: card verde padrão.
+        // Total calculado pelo app: card ameixa padrão.
         color: AppStatusColors.calculatedValueBackground,
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
@@ -2719,7 +2720,7 @@ class _TotalDespesaFixaLine extends StatelessWidget {
     final value = (total == null || total!.trim().isEmpty) ? '0,00' : total!.trim();
     return DecoratedBox(
       decoration: BoxDecoration(
-        // Total calculado pelo app: card verde padrão.
+        // Total calculado pelo app: card ameixa padrão.
         color: AppStatusColors.calculatedValueBackground,
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
@@ -2854,7 +2855,7 @@ class _ReceitaCostMiniCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // Custos somados pelo app: card verde padrão de valor calculado.
+    // Custos somados pelo app: card ameixa padrão de valor calculado.
     const bg = AppStatusColors.calculatedValueBackground;
     const fg = AppStatusColors.onCalculatedValue;
     return Container(
@@ -2997,7 +2998,7 @@ class _TotalCategoriaRateioLine extends StatelessWidget {
 
     final n = parsePtBrNumber(value) ?? 0;
     final isAbove100 = n > 100;
-    // Total calculado: card verde padrão. Acima de 100% o alerta tem prioridade
+    // Total calculado: card ameixa padrão. Acima de 100% o alerta tem prioridade
     // (fundo neutro, para o aviso em vermelho continuar legível).
     final green = !isAbove100;
     const onCalc = AppStatusColors.onCalculatedValue;
@@ -3845,7 +3846,7 @@ class _InlineInfoPill extends StatelessWidget {
   final Color? backgroundColor;
   final Color? foregroundColor;
 
-  /// Valor calculado pelo app: card verde padrão.
+  /// Valor calculado pelo app: card ameixa padrão.
   final bool calculated;
 
   @override
@@ -4863,8 +4864,27 @@ class _RowActions extends StatelessWidget {
     final editBtn = AppActionIconButton.edit(onPressed: onEdit);
     final delBtn = AppActionIconButton.delete(onPressed: onDelete);
 
+    // Item: botão de observação (bloco de notas) só quando houver texto em `obs`.
+    final obs = definition.keyName == 'item' ? observacaoDe(row) : null;
+    final obsBtn = obs == null
+        ? null
+        : AppActionIconButton.observacao(
+            onPressed: () => showObservacaoDialog(
+              context,
+              titulo: row['nome']?.toString().trim() ?? 'Observação',
+              texto: obs,
+            ),
+          );
+
     if (horizontal) {
-      return Row(mainAxisSize: MainAxisSize.min, children: [editBtn, if (canDelete) ...[const SizedBox(width: 4), delBtn]]);
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (obsBtn != null) ...[obsBtn, const SizedBox(width: 4)],
+          editBtn,
+          if (canDelete) ...[const SizedBox(width: 4), delBtn],
+        ],
+      );
     }
 
     return Column(
