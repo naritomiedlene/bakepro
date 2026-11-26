@@ -52,7 +52,7 @@ class ItemPdfReport {
         'Tipo: $filtroTipo   |   Nome contém: ${filtroNome.isEmpty ? '(sem filtro)' : '"$filtroNome"'}   |   Itens: ${itens.length}',
       ],
       // A coluna Tipo sai da tabela: o tipo é o título de cada grupo.
-      headers: const ['Item', 'Marca', 'Unidade', 'Custo unitário inicial', 'Custo unitário', 'Atualizado em'],
+      headers: const ['Item', 'Marca', 'Unidade', 'Custo unitário', 'Atualizado em'],
       grupos: [
         for (final tipo in tipos)
           RelatorioPdfGrupo(
@@ -64,7 +64,6 @@ class ItemPdfReport {
                   (r['nome'] ?? '').toString().trim(),
                   rel(r['marca'], 'nome') ?? '-',
                   rel(r['unidade'], 'unidade') ?? '-',
-                  custo(r['custounitarioinicial']),
                   custo(r['custounitario']),
                   data(r['dataatualizacao']),
                 ],

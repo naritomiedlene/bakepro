@@ -344,11 +344,11 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       final storedIsZero = (custoIng != null && custoIng == 0);
 
       if (custoIng == null || storedIsZero) {
-        // Fallback: item.(custounitario|custounitarioinicial) * ingrediente.quantidadegrama
+        // Fallback: item.custounitario * ingrediente.quantidadegrama
         num? custoUnit;
         final item = row['item'];
         if (item is Map) {
-          final raw = item['custounitario'] ?? item['custounitarioinicial'];
+          final raw = item['custounitario'];
           custoUnit = parsePtBrNumber(raw);
         }
 
@@ -426,11 +426,11 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       final storedIsZero = (custoMat != null && custoMat == 0);
 
       if (custoMat == null || storedIsZero) {
-        // Fallback: item.(custounitario|custounitarioinicial) * material.quantidade
+        // Fallback: item.custounitario * material.quantidade
         num? custoUnit;
         final item = row['item'];
         if (item is Map) {
-          final raw = item['custounitario'] ?? item['custounitarioinicial'];
+          final raw = item['custounitario'];
           custoUnit = parsePtBrNumber(raw);
         }
 
@@ -965,7 +965,7 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
         final isIngredienteOrMaterial = widget.definition.keyName == 'ingrediente' || widget.definition.keyName == 'material';
         // Embed Item + its Unidade so nested Receita lists can show "Qtde" with unit.
         // Note: unidade table uses column `unidade` as its label.
-        const itemSelect = 'item:itemid(nome,custounitario,custounitarioinicial,unidade:unidadeid(unidade))';
+        const itemSelect = 'item:itemid(nome,custounitario,unidade:unidadeid(unidade))';
         select = isIngredienteOrMaterial ? '*, $itemSelect, receita:receitaid(empresaid)' : '*, $itemSelect';
       } else if (shouldEmbedFkLabelsForItem) {
         // Item: embed related labels used by the 2-line list layout:
@@ -3012,7 +3012,7 @@ class _IngredienteInlineCostsRow extends StatelessWidget {
     num? custoUnit;
     String? unidadeTxt;
     if (item is Map) {
-      final raw = item['custounitario'] ?? item['custounitarioinicial'];
+      final raw = item['custounitario'];
       custoUnit = raw is num ? raw : num.tryParse(raw?.toString() ?? '');
 
       // Embedded as: item: { ..., unidade: { unidade: 'g' } }
@@ -3097,7 +3097,7 @@ class _MaterialInlineCostsRow extends StatelessWidget {
     num? custoUnit;
     String? unidadeTxt;
     if (item is Map) {
-      final raw = item['custounitario'] ?? item['custounitarioinicial'];
+      final raw = item['custounitario'];
       custoUnit = raw is num ? raw : num.tryParse(raw?.toString() ?? '');
 
       final unidade = item['unidade'];
@@ -3181,7 +3181,7 @@ class _DespesaVariavelInlineInfoRow extends StatelessWidget {
     num? custoUnit;
     String? unidadeTxt;
     if (item is Map) {
-      final raw = item['custounitario'] ?? item['custounitarioinicial'];
+      final raw = item['custounitario'];
       custoUnit = raw is num ? raw : num.tryParse(raw?.toString() ?? '');
 
       final unidade = item['unidade'];
@@ -3261,7 +3261,7 @@ class _DespesaVariavelInlineInfoPills extends StatelessWidget {
     num? custoUnit;
     String? unidadeTxt;
     if (item is Map) {
-      final raw = item['custounitario'] ?? item['custounitarioinicial'];
+      final raw = item['custounitario'];
       custoUnit = raw is num ? raw : num.tryParse(raw?.toString() ?? '');
 
       final unidade = item['unidade'];
@@ -3338,7 +3338,7 @@ class _ItemInlineInfoPills extends StatelessWidget {
     unidadeTxt ??= row['unidadeid']?.toString().trim();
     if (unidadeTxt == 'null' || (unidadeTxt?.isEmpty ?? true)) unidadeTxt = null;
 
-    final rawCusto = row['custounitario'] ?? row['custounitarioinicial'];
+    final rawCusto = row['custounitario'];
     final custoUnit = rawCusto is num ? rawCusto : num.tryParse(rawCusto?.toString() ?? '');
     final custoTxt = custoUnit == null ? null : 'R\$ ${_formatCurrencyPtBr(custoUnit, decimals: 4)}';
     final custoSuffix = (unidadeTxt == null) ? '' : '/${unidadeTxt!.trim()}';
@@ -4380,7 +4380,7 @@ class _RowCard extends StatelessWidget {
       final item = row['item'];
       String? unidadeTxt;
       if (item is Map) {
-        final raw = item['custounitario'] ?? item['custounitarioinicial'];
+        final raw = item['custounitario'];
         if (raw is num) {
           custoUnit = raw;
         } else if (raw != null) {
@@ -4434,7 +4434,7 @@ class _RowCard extends StatelessWidget {
       final item = row['item'];
       String? unidadeTxt;
       if (item is Map) {
-        final raw = item['custounitario'] ?? item['custounitarioinicial'];
+        final raw = item['custounitario'];
         if (raw is num) {
           custoUnit = raw;
         } else if (raw != null) {

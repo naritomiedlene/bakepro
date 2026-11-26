@@ -730,9 +730,6 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       if (_isProduto && f.column == 'valorvenda') {
         return _formatPtBrFixed(parsed, 2);
       }
-      if (_isItem && f.column == 'custounitarioinicial') {
-        return _formatPtBrFixed(parsed, 4);
-      }
       if (_isItem && f.column == 'custounitario') {
         return _formatPtBrFixed(parsed, 4);
       }
@@ -813,12 +810,12 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     // Defaults: newly added numeric columns that are NOT NULL in the DB.
     // Keep this conservative and only apply on insert.
     if (!_isEdit) {
-      for (final col in const ['custounitarioinicial', 'qtdestoqueinicial', 'taxadelivery']) {
+      for (final col in const ['custounitario', 'qtdestoqueinicial', 'taxadelivery']) {
         final ctrl = _ctrls[col];
         if (ctrl == null) continue;
         if (ctrl.text.trim().isEmpty) {
           ctrl.text = switch (col) {
-            'custounitarioinicial' => '0,0000',
+            'custounitario' => '0,0000',
             'taxadelivery' => '0,00',
             _ => '0',
           };
@@ -1672,11 +1669,6 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
           } else if (widget.definition.keyName == 'empresadelivery' && f.column == 'taxadelivery') {
             // Mask: up to 9.999,99 (pt-BR) -> numeric(6,2)
             inputFormatters = const [_PtBrDecimalFormatter(maxIntDigits: 4, decimalDigits: 2, useThousandsSeparator: true)];
-           } else if (_isItem && f.column == 'custounitarioinicial') {
-           // Mask: up to 9.999.999,9999 (pt-BR)
-           inputFormatters = const [
-             _PtBrDecimalFormatter(maxIntDigits: 7, decimalDigits: 4, useThousandsSeparator: true),
-           ];
         } else if (_isItem && f.column == 'custounitario') {
           // Mask: up to 9.999.999,9999 (pt-BR)
           inputFormatters = const [

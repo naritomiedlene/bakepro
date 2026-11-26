@@ -4,14 +4,12 @@ class Item {
     required this.empresaId,
     required this.nome,
     this.custoUnitario,
-    this.custoUnitarioInicial,
   });
 
   final int itemId;
   final int empresaId;
   final String nome;
   final num? custoUnitario;
-  final num? custoUnitarioInicial;
 
   factory Item.fromJson(Map<String, dynamic> json) => Item(
     itemId: (json['itemid'] as num).toInt(),
@@ -20,7 +18,6 @@ class Item {
     // New column name: `custounitario`.
     // Backward compatibility: accept legacy `custounitariounidade` if still present in older payloads.
     custoUnitario: (json['custounitario'] as num?) ?? (json['custounitariounidade'] as num?),
-    custoUnitarioInicial: (json['custounitarioinicial'] as num?),
   );
 
   Map<String, dynamic> toJson() => {
@@ -28,7 +25,6 @@ class Item {
     'empresaid': empresaId,
     'nome': nome,
     'custounitario': custoUnitario,
-    'custounitarioinicial': custoUnitarioInicial,
   };
 
   Item copyWith({
@@ -36,12 +32,10 @@ class Item {
     int? empresaId,
     String? nome,
     num? custoUnitario,
-    num? custoUnitarioInicial,
   }) => Item(
     itemId: itemId ?? this.itemId,
     empresaId: empresaId ?? this.empresaId,
     nome: nome ?? this.nome,
     custoUnitario: custoUnitario ?? this.custoUnitario,
-    custoUnitarioInicial: custoUnitarioInicial ?? this.custoUnitarioInicial,
   );
 }

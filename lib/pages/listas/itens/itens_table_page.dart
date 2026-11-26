@@ -978,7 +978,6 @@ class _ItensDataTableState extends State<_ItensDataTable> {
       case 'marca_nome':
         return 180;
       case 'custounitario':
-      case 'custounitarioinicial':
         return 170;
       case 'dataatualizacao':
         return 170;
@@ -1007,7 +1006,7 @@ class _ItensDataTableState extends State<_ItensDataTable> {
     if (v is String) return v;
     if (v is num) {
       // Keep cost columns consistent with the form: 4 decimal places.
-      if (column == 'custounitario' || column == 'custounitarioinicial') return v.toStringAsFixed(4);
+      if (column == 'custounitario') return v.toStringAsFixed(4);
       return v.toString();
     }
     return v.toString();
@@ -1031,8 +1030,6 @@ class _ItensDataTableState extends State<_ItensDataTable> {
     switch (col) {
       case 'custounitario':
         return 'Custo Unitário - R\$';
-      case 'custounitarioinicial':
-        return 'Custo Unitário Inic - R\$';
       case 'dataatualizacao':
         return 'Data de Atualização';
       case 'tipoitem_nome':

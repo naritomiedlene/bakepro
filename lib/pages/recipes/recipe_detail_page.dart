@@ -45,7 +45,7 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> {
     num total = 0;
     for (final ing in ingredientes) {
       final qty = ing.quantidadeGrama;
-      final custoUnit = ing.item?.custoUnitario ?? ing.item?.custoUnitarioInicial;
+      final custoUnit = ing.item?.custoUnitario;
       final custo = ing.custoIngrediente ?? (custoUnit == null ? null : custoUnit * qty);
       total += custo ?? 0;
     }
@@ -311,7 +311,7 @@ class _IngredientCard extends StatelessWidget {
     final name = ingrediente.item?.nome ?? 'Item #${ingrediente.itemId}';
     final qty = ingrediente.quantidadeGrama;
     final qtyText = '${qty.toDouble().toStringAsFixed(0)} g';
-    final custoUnitario = ingrediente.item?.custoUnitario ?? ingrediente.item?.custoUnitarioInicial;
+    final custoUnitario = ingrediente.item?.custoUnitario;
     final custoUnitarioText = custoUnitario == null ? '—' : formatPtBrMoney(custoUnitario, decimalDigits: 4);
 
     // Prefer the stored cost (ingrediente.custoingrediente). If it's missing,

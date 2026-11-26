@@ -422,13 +422,9 @@ class Cadastros {
           required: true,
           fk: CadastroForeignKey(table: 'unidade', idColumn: 'unidadeid', labelColumn: 'unidade', scopedByEmpresa: false),
         ),
-        // Schema update (Supabase): added `custounitarioinicial`
-        // NOT NULL no BD (default 0)
-        CadastroField(column: 'custounitarioinicial', label: 'Custo unitário inicial', type: CadastroFieldType.number, required: true),
-
-        // Column used in multiple screens (lists/imports). Keep it editable so
-        // changes persist to the database.
-        CadastroField(column: 'custounitario', label: 'Custo unitário', type: CadastroFieldType.number, required: false),
+        // Único custo do item (a coluna `custounitarioinicial` foi removida).
+        // Usado em receitas, kits, despesas variáveis e importação de compras.
+        CadastroField(column: 'custounitario', label: 'Custo unitário', type: CadastroFieldType.number, required: true),
       ],
     ),
     CadastroDefinition(

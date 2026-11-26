@@ -30,12 +30,12 @@ class ReceitaService {
       // IMPORTANT:
       // Legacy rows may have custoingrediente/customaterial = 0 because older
       // logic didn't compute costs when item.custounitario was null.
-      // We recompute using (item.custounitario|custounitarioinicial) * quantidade.
+      // We recompute using item.custounitario * quantidade.
       final ingredienteRows = await SupabaseService.from(_ingredienteTable)
-          .select('custoingrediente,quantidadegrama,item:itemid(custounitario,custounitarioinicial)')
+          .select('custoingrediente,quantidadegrama,item:itemid(custounitario)')
           .eq('receitaid', receitaId);
       final materialRows = await SupabaseService.from(_materialTable)
-          .select('customaterial,quantidade,item:itemid(custounitario,custounitarioinicial)')
+          .select('customaterial,quantidade,item:itemid(custounitario)')
           .eq('receitaid', receitaId);
 
       num totalIng = 0;
@@ -48,7 +48,7 @@ class ReceitaService {
           final item = r['item'];
           num? custoUnit;
           if (item is Map) {
-            final raw = item['custounitario'] ?? item['custounitarioinicial'];
+            final raw = item['custounitario'];
             custoUnit = parsePtBrNumber(raw);
           }
           final qtyRaw = r['quantidadegrama'];
@@ -72,7 +72,7 @@ class ReceitaService {
           final item = r['item'];
           num? custoUnit;
           if (item is Map) {
-            final raw = item['custounitario'] ?? item['custounitarioinicial'];
+            final raw = item['custounitario'];
             custoUnit = parsePtBrNumber(raw);
           }
           final qtyRaw = r['quantidade'];
@@ -157,10 +157,10 @@ class ReceitaService {
       // In some setups those fields can be null/0 (no DB trigger), while the
       // UI can still compute costs from item cost * quantity.
       final ingredienteRows = await SupabaseService.from(_ingredienteTable)
-          .select('receitaid,custoingrediente,quantidadegrama,item:itemid(custounitario,custounitarioinicial)')
+          .select('receitaid,custoingrediente,quantidadegrama,item:itemid(custounitario)')
           .inFilter('receitaid', receitaIds);
       final materialRows = await SupabaseService.from(_materialTable)
-          .select('receitaid,customaterial,quantidade,item:itemid(custounitario,custounitarioinicial)')
+          .select('receitaid,customaterial,quantidade,item:itemid(custounitario)')
           .inFilter('receitaid', receitaIds);
 
       final totalIngredientes = <int, num>{};
@@ -174,7 +174,7 @@ class ReceitaService {
           final item = r['item'];
           num? custoUnit;
           if (item is Map) {
-            final raw = item['custounitario'] ?? item['custounitarioinicial'];
+            final raw = item['custounitario'];
             custoUnit = parsePtBrNumber(raw);
           }
           final qty = parsePtBrNumber(r['quantidadegrama']);
@@ -195,7 +195,7 @@ class ReceitaService {
           final item = r['item'];
           num? custoUnit;
           if (item is Map) {
-            final raw = item['custounitario'] ?? item['custounitarioinicial'];
+            final raw = item['custounitario'];
             custoUnit = parsePtBrNumber(raw);
           }
           final qty = parsePtBrNumber(r['quantidade']);

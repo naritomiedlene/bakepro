@@ -11,7 +11,7 @@ class IngredienteService {
       final rows = await SupabaseService.select(
         table,
         // NOTE: ingrediente table does not contain `empresaid`.
-        select: 'ingredienteid, receitaid, itemid, quantidadegrama, custoingrediente, item:itemid(itemid, empresaid, nome, custounitario, custounitarioinicial)',
+        select: 'ingredienteid, receitaid, itemid, quantidadegrama, custoingrediente, item:itemid(itemid, empresaid, nome, custounitario)',
         filters: {'receitaid': receitaId},
         orderBy: 'ingredienteid',
         ascending: true,

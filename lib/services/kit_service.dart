@@ -72,7 +72,7 @@ class KitService {
       );
       final kes = await SupabaseService.select(
         _kitEmbalagemTable,
-        select: 'kitembalagemid,kitid,quantidade, item:itemid(custounitario,custounitarioinicial)',
+        select: 'kitembalagemid,kitid,quantidade, item:itemid(custounitario)',
         filters: {'kitid': kitId},
         orderBy: 'kitembalagemid',
         ascending: true,
@@ -91,7 +91,7 @@ class KitService {
       num? totalEmbalagens;
       for (final row in kes) {
         final item = row['item'] is Map ? row['item'] as Map : null;
-        final rawUnit = item?['custounitario'] ?? item?['custounitarioinicial'];
+        final rawUnit = item?['custounitario'];
         final unit = parsePtBrNumber(rawUnit);
         final qty = parsePtBrNumber(row['quantidade']);
         if (unit == null || qty == null) continue;

@@ -62,7 +62,7 @@ class _KitCascadePageState extends State<KitCascadePage> {
     var any = false;
     for (final row in _kitEmbalagens) {
       final item = row['item'] is Map ? row['item'] as Map : null;
-      final rawUnit = item?['custounitario'] ?? item?['custounitarioinicial'];
+      final rawUnit = item?['custounitario'];
       final unit = parsePtBrNumber(rawUnit);
       final qty = parsePtBrNumber(row['quantidade']);
       if (unit == null || qty == null) continue;
@@ -125,7 +125,7 @@ class _KitCascadePageState extends State<KitCascadePage> {
       }
       final kes = await SupabaseService.select(
         'kitembalagem',
-        select: 'kitembalagemid,kitid,itemid,quantidade, item:itemid(nome,custounitario,custounitarioinicial)',
+        select: 'kitembalagemid,kitid,itemid,quantidade, item:itemid(nome,custounitario)',
         filters: {'kitid': kitId},
         orderBy: 'kitembalagemid',
         ascending: true,
@@ -665,7 +665,7 @@ String? _formatCustoUnitario(Object? itemRaw) {
 
 num? _parseCustoUnitario(Object? itemRaw) {
   final item = itemRaw is Map ? itemRaw : null;
-  final raw = item?['custounitario'] ?? item?['custounitarioinicial'];
+  final raw = item?['custounitario'];
   return parsePtBrNumber(raw);
 }
 
