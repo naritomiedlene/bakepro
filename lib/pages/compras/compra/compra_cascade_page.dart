@@ -1,3 +1,4 @@
+import 'package:bakepro/components/action_icon_button.dart';
 import 'package:bakepro/pages/cadastros/cadastro_definitions.dart';
 import 'package:bakepro/pages/cadastros/generic_cadastro_form_sheet.dart';
 import 'package:bakepro/pages/compras/compra/compra_item_import_sheet.dart';
@@ -302,9 +303,9 @@ class CompraItemCard extends StatelessWidget {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(tooltip: 'Editar', onPressed: onEdit, icon: Icon(Icons.edit_rounded, color: cs.primary), visualDensity: VisualDensity.compact),
-                const SizedBox(height: 2),
-                IconButton(tooltip: 'Excluir', onPressed: onDelete, icon: Icon(Icons.delete_outline_rounded, color: cs.error), visualDensity: VisualDensity.compact),
+                AppActionIconButton.edit(onPressed: onEdit),
+                const SizedBox(height: 6),
+                AppActionIconButton.delete(onPressed: onDelete),
               ],
             ),
           ],
@@ -550,6 +551,8 @@ class _CompraItemFormSheetState extends State<CompraItemFormSheet> {
                 const SizedBox(height: AppSpacing.md),
               ],
               DropdownButtonFormField<int>(
+                // Cursor no primeiro campo ao abrir.
+                autofocus: true,
                 value: int.tryParse(_itemCtrl.text),
                 isExpanded: true,
                 icon: Icon(Icons.keyboard_arrow_down_rounded, color: cs.onSurfaceVariant),

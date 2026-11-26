@@ -1,3 +1,5 @@
+import 'package:bakepro/components/count_badge.dart';
+import 'package:bakepro/components/action_icon_button.dart';
 import 'package:bakepro/pages/cadastros/cadastro_definitions.dart';
 import 'package:bakepro/pages/cadastros/generic_cadastro_form_sheet.dart';
 import 'package:bakepro/services/receita_service.dart';
@@ -85,6 +87,10 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
 
   final TextEditingController _itemSearchController = TextEditingController();
   String _itemSearchQuery = '';
+
+  // Marca: filtro pelo nome (filtra _rows em memória).
+  final TextEditingController _marcaSearchController = TextEditingController();
+  String _marcaSearchQuery = '';
   // Item: tipos (tabela tipoitem) para o filtro e tipo selecionado (null = TODOS).
   List<Map<String, dynamic>> _itemTipos = const [];
   int? _itemTipoFiltroId;
@@ -665,7 +671,7 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       'despesavariavel',
       'categoria',
       'delivery',
-      'setup',
+      'empresataxas',
     };
     const internalCadastros = <String>{'produtoreceita', 'material', 'ingrediente'};
     final key = widget.definition.keyName;
@@ -685,6 +691,7 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
     _receitaSearchController.addListener(_onReceitaSearchChanged);
     _produtoSearchController.addListener(_onProdutoSearchChanged);
     _itemSearchController.addListener(_onItemSearchChanged);
+    _marcaSearchController.addListener(_onMarcaSearchChanged);
     // This page is used by many cadastros. For Receita, the filter must always
     // start blank when the user opens the cadastro list.
     _resetReceitaSearchIfNeeded();
@@ -753,6 +760,8 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
     _produtoSearchController.dispose();
     _itemSearchController.removeListener(_onItemSearchChanged);
     _itemSearchController.dispose();
+    _marcaSearchController.removeListener(_onMarcaSearchChanged);
+    _marcaSearchController.dispose();
     super.dispose();
   }
 
@@ -764,6 +773,8 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       _resetReceitaSearchIfNeeded();
       _resetProdutoSearchIfNeeded();
       _resetItemSearchIfNeeded();
+      _marcaSearchController.text = '';
+      _marcaSearchQuery = '';
       _load();
     }
   }
@@ -807,6 +818,13 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       _produtoSearchQuery = q;
       _applyProdutoFilter();
     });
+  }
+
+  void _onMarcaSearchChanged() {
+    if (widget.definition.keyName != 'marca') return;
+    final q = _marcaSearchController.text.trim();
+    if (q == _marcaSearchQuery) return;
+    setState(() => _marcaSearchQuery = q);
   }
 
   void _onItemSearchChanged() {
@@ -2032,6 +2050,7 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
     final isReceita = widget.definition.keyName == 'receita';
     final isProduto = widget.definition.keyName == 'produto';
     final isItem = widget.definition.keyName == 'item';
+    final isMarca = widget.definition.keyName == 'marca';
     final isEmpresa = widget.definition.keyName == 'empresa';
     final isEmpresaDelivery = widget.definition.keyName == 'empresadelivery';
     final isKit = widget.definition.keyName == 'kit';
@@ -2092,7 +2111,11 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                           ? _rows
                               .where((r) => (r['classificacaokitid'] as num?)?.toInt() == _kitClassificacaoFiltroId)
                               .toList(growable: false)
-                          : _rows)));
+                          : (isMarca && _marcaSearchQuery.isNotEmpty
+                                ? _rows
+                                    .where((r) => (r['nome'] ?? '').toString().toLowerCase().contains(_marcaSearchQuery.toLowerCase()))
+                                    .toList(growable: false)
+                                : _rows))));
 
     // UX: when inside a nested context (e.g., Receita -> Ingredientes/Materiais)
     // we already show the count next to the section title. Avoid duplicating it
@@ -2110,63 +2133,28 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                       ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
-                    // Quantidade de kits em destaque (fundo vermelho).
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade700,
-                        borderRadius: BorderRadius.circular(AppRadius.lg),
-                        border: Border.all(color: Colors.red.shade700),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 180),
-                          switchInCurve: Curves.easeOutCubic,
-                          switchOutCurve: Curves.easeInCubic,
-                          transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
-                          child: Text(
-                            _formatItemsCount(visibleRows.length),
-                            key: ValueKey('itemsCount_${widget.definition.keyName}_${visibleRows.length}'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
-                          ),
-                        ),
+                    // Contador padrão (card abóbora).
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+                      child: CountBadge(
+                        _formatItemsCount(visibleRows.length),
+                        key: ValueKey('itemsCount_${widget.definition.keyName}_${visibleRows.length}'),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: cs.primary.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(AppRadius.lg),
-                        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        child: Text(
-                          "Imposto: ${_formatPtBrNumber(_empresaSetupImpostoPct) ?? '—'}%",
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
-                        ),
-                      ),
+                    // Imposto e Taxa motoboy (valores do banco): mesmo card dos dados do
+                    // delivery — rótulo em cinza e valor em branco.
+                    InfoPill(
+                      label: 'Imposto',
+                      value: "${_formatPtBrNumber(_empresaSetupImpostoPct) ?? '—'}%",
                     ),
                     const SizedBox(width: AppSpacing.xs),
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: cs.primary.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(AppRadius.lg),
-                        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        child: Text(
-                          "Taxa motoboy: ${_empresaSetupTaxaMotoboyPct == null ? '—' : formatPtBrMoney(_empresaSetupTaxaMotoboyPct!, decimalDigits: 2)}%",
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
-                        ),
-                      ),
+                    InfoPill(
+                      label: 'Taxa motoboy',
+                      value: "${_empresaSetupTaxaMotoboyPct == null ? '—' : formatPtBrMoney(_empresaSetupTaxaMotoboyPct!, decimalDigits: 2)}%",
                     ),
                   ],
                 )
@@ -2177,12 +2165,10 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                     switchInCurve: Curves.easeOutCubic,
                     switchOutCurve: Curves.easeInCubic,
                     transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
-                    child: Text(
+                    // Contador padrão (card abóbora).
+                    child: CountBadge(
                       _formatItemsCount(visibleRows.length),
                       key: ValueKey('itemsCount_${widget.definition.keyName}_${visibleRows.length}'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ))
@@ -2221,6 +2207,54 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                         tooltip: 'Limpar filtro',
                         onPressed: () {
                           _receitaSearchController.text = '';
+                          FocusScope.of(context).unfocus();
+                        },
+                        icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant, size: 18),
+                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                        padding: EdgeInsets.zero,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+
+    // Marca: filtro pelo nome (mesmo visual do filtro de produtos/itens).
+    final marcaFilterField = !isMarca
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: AppSpacing.sm),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(AppRadius.xl),
+                border: Border.all(color: cs.outline.withValues(alpha: 0.14)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 6),
+                child: Row(
+                  children: [
+                    Icon(Icons.search_rounded, size: 18, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _marcaSearchController,
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          hintText: 'Filtrar marcas pelo nome',
+                          border: InputBorder.none,
+                          isDense: true,
+                          hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                    if (_marcaSearchQuery.isNotEmpty)
+                      IconButton(
+                        tooltip: 'Limpar filtro',
+                        onPressed: () {
+                          _marcaSearchController.text = '';
                           FocusScope.of(context).unfocus();
                         },
                         icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant, size: 18),
@@ -2467,12 +2501,8 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                   if (visibleRows.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(left: 10),
-                      child: Text(
-                        _formatItemsCount(visibleRows.length),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
-                      ),
+                      // Contador padrão (card abóbora).
+                      child: CountBadge(_formatItemsCount(visibleRows.length)),
                     ),
                 ],
               ),
@@ -2530,6 +2560,7 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
             receitaFilterField,
             produtoFilterField,
             itemFilterField,
+            marcaFilterField,
             itemTipoFilterField,
             kitFilterField,
             const SizedBox(height: AppSpacing.xs),
@@ -2644,7 +2675,8 @@ class _TotalDespesaVariavelLine extends StatelessWidget {
     final value = (total == null || total!.trim().isEmpty) ? '0,00' : total!.trim();
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+        // Total calculado pelo app: card verde padrão.
+        color: AppStatusColors.calculatedValueBackground,
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
       ),
@@ -2652,14 +2684,14 @@ class _TotalDespesaVariavelLine extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           children: [
-            Icon(Icons.summarize_rounded, size: 18, color: cs.onSurfaceVariant),
+            Icon(Icons.summarize_rounded, size: 18, color: AppStatusColors.onCalculatedValue),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Total de despesas variáveis mensais',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600),
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(color: AppStatusColors.onCalculatedValue.withValues(alpha: 0.85), fontWeight: FontWeight.normal),
               ),
             ),
             const SizedBox(width: 12),
@@ -2667,7 +2699,7 @@ class _TotalDespesaVariavelLine extends StatelessWidget {
               'R\$ $value',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w800),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(color: AppStatusColors.onCalculatedValue, fontWeight: FontWeight.normal),
             ),
           ],
         ),
@@ -2687,7 +2719,8 @@ class _TotalDespesaFixaLine extends StatelessWidget {
     final value = (total == null || total!.trim().isEmpty) ? '0,00' : total!.trim();
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+        // Total calculado pelo app: card verde padrão.
+        color: AppStatusColors.calculatedValueBackground,
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
       ),
@@ -2695,14 +2728,14 @@ class _TotalDespesaFixaLine extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           children: [
-            Icon(Icons.summarize_rounded, size: 18, color: cs.onSurfaceVariant),
+            Icon(Icons.summarize_rounded, size: 18, color: AppStatusColors.onCalculatedValue),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Total de despesas fixas mensais',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600),
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(color: AppStatusColors.onCalculatedValue.withValues(alpha: 0.85), fontWeight: FontWeight.normal),
               ),
             ),
             const SizedBox(width: 12),
@@ -2710,7 +2743,7 @@ class _TotalDespesaFixaLine extends StatelessWidget {
               'R\$ $value',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w800),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(color: AppStatusColors.onCalculatedValue, fontWeight: FontWeight.normal),
             ),
           ],
         ),
@@ -2821,8 +2854,9 @@ class _ReceitaCostMiniCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final bg = emphasize ? cs.primary.withValues(alpha: 0.10) : cs.surface.withValues(alpha: 0.65);
-    final fg = emphasize ? cs.primary : cs.onSurface;
+    // Custos somados pelo app: card verde padrão de valor calculado.
+    const bg = AppStatusColors.calculatedValueBackground;
+    const fg = AppStatusColors.onCalculatedValue;
     return Container(
       constraints: const BoxConstraints(minWidth: 150),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -2845,7 +2879,7 @@ class _ReceitaCostMiniCard extends StatelessWidget {
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(color: fg.withValues(alpha: 0.85), fontWeight: FontWeight.normal),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -2853,7 +2887,7 @@ class _ReceitaCostMiniCard extends StatelessWidget {
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w900),
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(color: fg, fontWeight: FontWeight.normal),
                 ),
               ],
             ),
@@ -2963,9 +2997,13 @@ class _TotalCategoriaRateioLine extends StatelessWidget {
 
     final n = parsePtBrNumber(value) ?? 0;
     final isAbove100 = n > 100;
+    // Total calculado: card verde padrão. Acima de 100% o alerta tem prioridade
+    // (fundo neutro, para o aviso em vermelho continuar legível).
+    final green = !isAbove100;
+    const onCalc = AppStatusColors.onCalculatedValue;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+        color: green ? AppStatusColors.calculatedValueBackground : cs.surfaceContainerHighest.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
       ),
@@ -2973,7 +3011,7 @@ class _TotalCategoriaRateioLine extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           children: [
-            Icon(Icons.percent_rounded, size: 18, color: cs.onSurfaceVariant),
+            Icon(Icons.percent_rounded, size: 18, color: green ? onCalc : cs.onSurfaceVariant),
             const SizedBox(width: 8),
             Expanded(
               child: Text.rich(
@@ -2981,11 +3019,17 @@ class _TotalCategoriaRateioLine extends StatelessWidget {
                   children: [
                     TextSpan(
                       text: '% Total de despesas rateadas: ',
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600),
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: green ? onCalc.withValues(alpha: 0.85) : cs.onSurfaceVariant,
+                            fontWeight: green ? FontWeight.normal : FontWeight.w600,
+                          ),
                     ),
                     TextSpan(
                       text: '$value %',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w800),
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: green ? onCalc : cs.onSurface,
+                            fontWeight: green ? FontWeight.normal : FontWeight.w800,
+                          ),
                     ),
                   ],
                 ),
@@ -3067,9 +3111,9 @@ class _IngredienteInlineCostsRow extends StatelessWidget {
             children: [
               _InlineInfoPill(icon: Icons.scale_rounded, label: 'Qtde', value: '$qtyTxt$unitSuffix', colorScheme: cs),
               const SizedBox(width: 8),
-              _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo unit.', value: custoUnitTxt, colorScheme: cs),
+              _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo unit.', value: custoUnitTxt, colorScheme: cs, calculated: true),
               const SizedBox(width: 8),
-              _InlineInfoPill(icon: Icons.summarize_rounded, label: 'Custo na receita', value: custoIngTxt, colorScheme: cs, emphasize: true),
+              _InlineInfoPill(icon: Icons.summarize_rounded, label: 'Custo na receita', value: custoIngTxt, colorScheme: cs, calculated: true),
             ],
           ),
         ),
@@ -3151,9 +3195,9 @@ class _MaterialInlineCostsRow extends StatelessWidget {
             children: [
               _InlineInfoPill(icon: Icons.scale_rounded, label: 'Qtde', value: '$qtyTxt$unitSuffix', colorScheme: cs),
               const SizedBox(width: 8),
-              _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo unit.', value: custoUnitTxt, colorScheme: cs),
+              _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo unit.', value: custoUnitTxt, colorScheme: cs, calculated: true),
               const SizedBox(width: 8),
-              _InlineInfoPill(icon: Icons.summarize_rounded, label: 'Custo na receita', value: custoMatTxt, colorScheme: cs, emphasize: true),
+              _InlineInfoPill(icon: Icons.summarize_rounded, label: 'Custo na receita', value: custoMatTxt, colorScheme: cs, calculated: true),
             ],
           ),
         ),
@@ -3231,9 +3275,9 @@ class _DespesaVariavelInlineInfoRow extends StatelessWidget {
             children: [
               _InlineInfoPill(icon: Icons.scale_rounded, label: 'Consumo mensal', value: '$consumoTxt$consumoSuffix', colorScheme: cs),
               const SizedBox(width: 8),
-              _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo unit.', value: '$custoUnitTxt$unitSuffix', colorScheme: cs),
+              _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo unit.', value: '$custoUnitTxt$unitSuffix', colorScheme: cs, calculated: true),
               const SizedBox(width: 8),
-              _InlineInfoPill(icon: Icons.summarize_rounded, label: 'Total/mês', value: valorTxt, colorScheme: cs, emphasize: true),
+              _InlineInfoPill(icon: Icons.summarize_rounded, label: 'Total/mês', value: valorTxt, colorScheme: cs, calculated: true),
             ],
           ),
         ),
@@ -3306,8 +3350,8 @@ class _DespesaVariavelInlineInfoPills extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         _InlineInfoPill(icon: Icons.scale_rounded, label: 'Consumo mensal', value: '$consumoTxt$consumoSuffix', colorScheme: cs),
-        _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo unit.', value: '$custoUnitTxt$unitSuffix', colorScheme: cs),
-        _InlineInfoPill(icon: Icons.summarize_rounded, label: 'Total/mês', value: valorTxt, colorScheme: cs, emphasize: true),
+        _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo unit.', value: '$custoUnitTxt$unitSuffix', colorScheme: cs, calculated: true),
+        _InlineInfoPill(icon: Icons.summarize_rounded, label: 'Total/mês', value: valorTxt, colorScheme: cs, calculated: true),
       ],
     );
   }
@@ -3361,7 +3405,7 @@ class _ItemInlineInfoPills extends StatelessWidget {
     if (unidadeTxt != null) pills.add(_InlineInfoPill(icon: Icons.straighten_rounded, label: 'Unid', value: unidadeTxt!, colorScheme: cs));
     if (marcaNome != null) pills.add(_InlineInfoPill(icon: Icons.sell_rounded, label: 'Marca', value: marcaNome!, colorScheme: cs));
     if (tipoNome != null) pills.add(_InlineInfoPill(icon: Icons.category_rounded, label: 'Tipo', value: tipoNome!, colorScheme: cs));
-    if (custoTxt != null) pills.add(_InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo unit.', value: '$custoTxt$custoSuffix', colorScheme: cs));
+    if (custoTxt != null) pills.add(_InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo unit.', value: '$custoTxt$custoSuffix', colorScheme: cs, calculated: true));
 
     if (pills.isEmpty) return const SizedBox.shrink();
 
@@ -3446,7 +3490,7 @@ class _ReceitaInlineCostsRow extends StatelessWidget {
     if (ingTxt == null && matTxt == null && totalTxt == null) return const SizedBox.shrink();
 
     Widget pill({required IconData icon, required String label, required String value, bool emphasize = false}) =>
-        _InlineInfoPill(icon: icon, label: label, value: value, colorScheme: cs, emphasize: emphasize);
+        _InlineInfoPill(icon: icon, label: label, value: value, colorScheme: cs, calculated: true);
 
     return Container(
       decoration: BoxDecoration(
@@ -3626,6 +3670,7 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
                       label: 'Valor de lista para ${d.nome} - R\$',
                       value: valorLista == null ? '—' : formatPtBrCurrency(valorLista),
                       colorScheme: cs,
+                      calculated: true,
                     ),
                   ]),
                 );
@@ -3642,6 +3687,7 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
                       label: 'Valor total do kit - R\$',
                       value: formatPtBrCurrency(prod),
                       colorScheme: cs,
+                      calculated: true,
                     ),
                     if (valorListaSite != null) ...[
                       const SizedBox(width: AppSpacing.sm),
@@ -3650,6 +3696,7 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
                         label: 'Valor de lista do site - R\$',
                         value: formatPtBrCurrency(valorListaSite),
                         colorScheme: cs,
+                        calculated: true,
                       ),
                     ],
               ]),
@@ -3738,11 +3785,11 @@ class _ProdutoInlineInfoPills extends StatelessWidget {
           label: 'Categoria',
           value: categoriaNome,
           colorScheme: cs,
-          backgroundColor: Colors.green.shade700,
-          foregroundColor: Colors.white,
+          backgroundColor: AppStatusColors.categoriaBackground,
+          foregroundColor: AppStatusColors.onCategoria,
         ),
       if (custoProducao != null)
-        _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo de produção', value: formatPtBrCurrency(custoProducao), colorScheme: cs),
+        _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo de produção', value: formatPtBrCurrency(custoProducao), colorScheme: cs, calculated: true),
       if (qtdTxt != null)
         _InlineInfoPill(icon: Icons.inventory_rounded, label: 'Qtd produzida', value: qtdTxt, colorScheme: cs),
     ];
@@ -3787,6 +3834,7 @@ class _InlineInfoPill extends StatelessWidget {
     this.emphasize = false,
     this.backgroundColor,
     this.foregroundColor,
+    this.calculated = false,
   });
 
   final IconData? icon;
@@ -3797,6 +3845,9 @@ class _InlineInfoPill extends StatelessWidget {
   final Color? backgroundColor;
   final Color? foregroundColor;
 
+  /// Valor calculado pelo app: card verde padrão.
+  final bool calculated;
+
   @override
   Widget build(BuildContext context) => InfoPill(
         icon: icon,
@@ -3805,6 +3856,7 @@ class _InlineInfoPill extends StatelessWidget {
         emphasize: emphasize,
         backgroundColor: backgroundColor,
         foregroundColor: foregroundColor,
+        calculated: calculated,
       );
 }
 
@@ -3838,6 +3890,7 @@ class _RowCard extends StatelessWidget {
     final isEmpresa = definition.keyName == 'empresa';
     final isUsuario = definition.keyName == 'usuario';
     final isMarca = definition.keyName == 'marca';
+    final isEmpresaTaxas = definition.keyName == 'empresataxas';
     final isItem = definition.keyName == 'item';
     final isRateio = definition.keyName == 'rateiodespesa';
     final isDespesaVariavel = definition.keyName == 'despesavariavel';
@@ -3892,6 +3945,9 @@ class _RowCard extends StatelessWidget {
         : null;
 
     final embedActionsInTitleLine =
+        // Marca e Imposto/taxas: lápis e lixeira na mesma linha do nome.
+        isMarca ||
+        isEmpresaTaxas ||
         isItem ||
         isProduto ||
         isKit ||
@@ -3953,8 +4009,8 @@ class _RowCard extends StatelessWidget {
               label: 'Classificação',
               value: kitClassificacaoNome,
               colorScheme: cs,
-              backgroundColor: Colors.green.shade700,
-              foregroundColor: Colors.white,
+              backgroundColor: AppStatusColors.categoriaBackground,
+              foregroundColor: AppStatusColors.onCategoria,
             ),
           ),
         ],
@@ -4007,7 +4063,8 @@ class _RowCard extends StatelessWidget {
                     )
                   else if (embedActionsInTitleLine)
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      // Marca (só o nome): centraliza o nome na altura dos botões.
+                      crossAxisAlignment: (isMarca || isEmpresaTaxas) ? CrossAxisAlignment.center : CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           // Despesa variável: nome na 1ª linha e os cards de valores sempre na 2ª.
@@ -4180,6 +4237,17 @@ class _RowCard extends StatelessWidget {
                     )
                   else if (isKit)
                     _KitInlineInfoRow(row: row, impostoPct: kitImpostoPct, taxaMotoboyPct: kitTaxaMotoboyPct, deliveries: kitDeliveries)
+                  else if (isEmpresaTaxas)
+                    // I.R., Taxa adm e Taxa motoboy em cards (valores digitados: card padrão).
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: 6,
+                      children: [
+                        InfoPill(icon: Icons.account_balance_rounded, label: 'I.R.', value: '${_formatPtBrCurrencyWithThousands(row['imposto']) ?? '—'}%'),
+                        InfoPill(icon: Icons.percent_rounded, label: 'Taxa adm', value: '${_formatPtBrCurrencyWithThousands(row['taxaadm']) ?? '—'}%'),
+                        InfoPill(icon: Icons.two_wheeler_rounded, label: 'Taxa motoboy', value: '${_formatPtBrCurrencyWithThousands(row['taxamotoboy']) ?? '—'}%'),
+                      ],
+                    )
                   else if (subtitleText != null && subtitleText.isNotEmpty)
                     Text(subtitleText, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.25))
                   else if (lines.isNotEmpty)
@@ -4321,7 +4389,9 @@ class _RowCard extends StatelessWidget {
   TextStyle? _titleStyle(BuildContext context, CadastroDefinition def) {
     // Compact title style for denser lists.
     final base = Theme.of(context).textTheme.titleSmall;
-    if (def.keyName == 'marca' || def.keyName == 'rateiodespesa' || def.keyName == 'produto' || def.keyName == 'kit') {
+    // Marca: nome com peso normal (mais leve).
+    if (def.keyName == 'marca') return base?.copyWith(fontWeight: FontWeight.normal);
+    if (def.keyName == 'rateiodespesa' || def.keyName == 'produto' || def.keyName == 'kit') {
       return base?.copyWith(fontWeight: FontWeight.w700);
     }
     return base;
@@ -4745,7 +4815,6 @@ class _RowActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final session = context.watch<AppSessionController>();
     final isEmpresa = definition.keyName == 'empresa';
     final canDelete = !(isEmpresa && !session.isSuperAdmin);
@@ -4753,43 +4822,27 @@ class _RowActions extends StatelessWidget {
     final isReceita = definition.keyName == 'receita';
     final receitaId = row[definition.idColumn];
 
-    IconButton _compactIcon({required String tooltip, required VoidCallback? onPressed, required IconData icon, required Color color}) {
-      return IconButton(
-        tooltip: tooltip,
-        onPressed: onPressed,
-        icon: Icon(icon, color: color),
-        visualDensity: VisualDensity.compact,
-        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-        padding: EdgeInsets.zero,
-      );
-    }
-
     if (isReceita) {
       // Force a consistent 2x2 layout to keep card height predictable.
-      final Widget ingBtn = _compactIcon(
-        tooltip: 'Ingredientes',
+      // Ingredientes (verde-azulado) e Materiais (âmbar) com cores próprias.
+      final Widget ingBtn = AppActionIconButton.ingredientes(
         onPressed: receitaId is num
             ? () async {
                 await context.push('/cadastros/receita/${receitaId.toInt()}/ingredientes');
                 if (context.mounted) onRefreshRequested?.call();
               }
             : null,
-        icon: Icons.science_outlined,
-        color: cs.primary,
       );
-      final Widget matBtn = _compactIcon(
-        tooltip: 'Materiais',
+      final Widget matBtn = AppActionIconButton.materiais(
         onPressed: receitaId is num
             ? () async {
                 await context.push('/cadastros/receita/${receitaId.toInt()}/materiais');
                 if (context.mounted) onRefreshRequested?.call();
               }
             : null,
-        icon: Icons.all_inbox_outlined,
-        color: cs.primary,
       );
-      final Widget editBtn = _compactIcon(tooltip: 'Editar', onPressed: onEdit, icon: Icons.edit_rounded, color: cs.primary);
-      final Widget delBtn = _compactIcon(tooltip: 'Excluir', onPressed: onDelete, icon: Icons.delete_outline_rounded, color: cs.error);
+      final Widget editBtn = AppActionIconButton.edit(onPressed: onEdit);
+      final Widget delBtn = AppActionIconButton.delete(onPressed: onDelete);
 
       // Receita cards have 4 actions. Keep predictable layout by default.
       // If horizontal is requested, prefer a compact Wrap so it can fit in-line.
@@ -4807,8 +4860,8 @@ class _RowActions extends StatelessWidget {
       );
     }
 
-    final editBtn = _compactIcon(tooltip: 'Editar', onPressed: onEdit, icon: Icons.edit_rounded, color: cs.primary);
-    final delBtn = _compactIcon(tooltip: 'Excluir', onPressed: onDelete, icon: Icons.delete_outline_rounded, color: cs.error);
+    final editBtn = AppActionIconButton.edit(onPressed: onEdit);
+    final delBtn = AppActionIconButton.delete(onPressed: onDelete);
 
     if (horizontal) {
       return Row(mainAxisSize: MainAxisSize.min, children: [editBtn, if (canDelete) ...[const SizedBox(width: 4), delBtn]]);

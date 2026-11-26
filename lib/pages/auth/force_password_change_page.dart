@@ -170,6 +170,8 @@ class _ForcePasswordChangePageState extends State<ForcePasswordChangePage> with 
                                 const SizedBox(height: AppSpacing.lg),
                                 TextField(
                                   controller: _password1,
+                                  // Cursor no primeiro campo ao abrir.
+                                  autofocus: true,
                                   obscureText: _obscurePassword1,
                                   textInputAction: TextInputAction.next,
                                   onTap: _clearErrorOnUserInteraction,

@@ -335,7 +335,8 @@ class DespesaVariavelItemDetailsCard extends StatelessWidget {
                       line('Unidade', unidadeLabel!),
                       const SizedBox(height: AppSpacing.xs),
                     ],
-                    if (custoNum != null) line('Custo unitário (R\$)$unitSuffix', formatCurrency4(custoNum)),
+                    // Mesmo padrão do formulário de item: "Custo unitário (R$/gr)" e valor "R$ 0,0464/gr".
+                    if (custoNum != null) line('Custo unitário (R\$$unitSuffix)', '${formatCurrency4(custoNum)}$unitSuffix'),
                     if (itemRow == null) Text('Selecione um item para ver os detalhes.', style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                   ],
                 ),
@@ -488,9 +489,13 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     final t = raw.trim();
     if (t.isEmpty) return null;
 
+    // Pontos em grupos de 3 sem vírgula ("1.000", "12.345.678") são separador de
+    // milhar das máscaras pt-BR — não decimal. Antes, "1.000" virava 1.
+    final isPtBrThousandsOnly = RegExp(r'^-?\d{1,3}(\.\d{3})+$').hasMatch(t);
+
     // Fast path: accept standard dot-decimal input (e.g. "10.12").
     // This avoids turning decimals into thousands when users type '.' as decimal.
-    final direct = num.tryParse(t);
+    final direct = isPtBrThousandsOnly ? null : num.tryParse(t);
     if (direct != null) return direct;
 
     // pt-BR normalization: remove thousand separators '.' and swap ',' -> '.'
@@ -733,8 +738,11 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       if (_isProduto && f.column == 'valorvenda') {
         return _formatPtBrFixed(parsed, 2);
       }
-      if (_isItem && f.column == 'custounitario') {
+      if (_isItem && (f.column == 'custounitario' || f.column == 'fatorconversao')) {
         return _formatPtBrFixed(parsed, 4);
+      }
+      if (_isItem && (f.column == 'qtdecomprada' || f.column == 'valorcompra')) {
+        return _formatPtBrThousands(parsed, 2);
       }
       if (_isRateioDespesa && (f.column == 'totaldespesafixa' || f.column == 'valormensal')) {
         // Despesas Fixas agora usam `despesafixa.valormensal` (monetário).
@@ -778,6 +786,32 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     return raw.isNotEmpty;
   }
 
+  /// Coluna do primeiro campo editável: recebe o cursor ao abrir o formulário.
+  /// Ignora campos ocultos, de auditoria, status na inclusão, empresa (fixa/automática)
+  /// e campos calculados/bloqueados.
+  String? _autoFocusColumnCache;
+  bool _autoFocusResolved = false;
+  String? get _autoFocusColumn {
+    if (_autoFocusResolved) return _autoFocusColumnCache;
+    _autoFocusResolved = true;
+    for (final f in widget.definition.fields) {
+      final c = f.column;
+      if (widget.hiddenColumns.contains(c) || widget.readOnlyColumns.contains(c)) continue;
+      if (c.toLowerCase() == 'dataatualizacao') continue;
+      if (_isStatusField(f) && !_isEdit) continue;
+      if (c == 'empresaid') continue;
+      if (_isItem && c == 'custounitario') continue;
+      if (_isDespesaVariavel && c == 'valormensal') continue;
+      // EmpresaDelivery: na edição a associação (empresa/delivery) não muda.
+      if (_isEdit && widget.definition.keyName == 'empresadelivery' && c == 'deliveryid') continue;
+      _autoFocusColumnCache = c;
+      break;
+    }
+    return _autoFocusColumnCache;
+  }
+
+  bool _autoFocusFor(CadastroField f) => f.column == _autoFocusColumn;
+
   @override
   void initState() {
     super.initState();
@@ -808,6 +842,13 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       _ctrls['consumomensal']?.addListener(_recomputeDespesaVariavelValorMensal);
       // `valormensal` é calculado (consumo × custo unitário) e não deve ser editável.
       // Mantemos o valor sempre derivado do consumo/item selecionado.
+    }
+
+    if (_isItem) {
+      // `custounitario` é calculado e não editável: recalcula ao mudar qtde/fator/valor.
+      for (final col in const ['qtdecomprada', 'fatorconversao', 'valorcompra']) {
+        _ctrls[col]?.addListener(_recomputeItemCustoUnitario);
+      }
     }
 
     // Defaults: newly added numeric columns that are NOT NULL in the DB.
@@ -1014,6 +1055,12 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
   void dispose() {
     if (_isDespesaVariavel) {
       _ctrls['consumomensal']?.removeListener(_recomputeDespesaVariavelValorMensal);
+    }
+
+    if (_isItem) {
+      for (final col in const ['qtdecomprada', 'fatorconversao', 'valorcompra']) {
+        _ctrls[col]?.removeListener(_recomputeItemCustoUnitario);
+      }
     }
 
     if (widget.definition.keyName == 'empresadelivery') {
@@ -1317,6 +1364,166 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
 
   bool _isOptionField(CadastroField f) => f.type == CadastroFieldType.option && (f.options?.isNotEmpty ?? false);
 
+  /// Item: rótulo da unidade de compra selecionada (ex.: "kg"), para o label da qtde.
+  String? _itemCompraUnidadeLabel() => _itemUnidadeLabel('compraunidadeid');
+
+  /// Item: rótulo da unidade selecionada em [column] (`unidadeid` ou `compraunidadeid`).
+  String? _itemUnidadeLabel(String column) {
+    if (!_isItem) return null;
+    final id = num.tryParse(_ctrls[column]?.text.trim() ?? '');
+    if (id == null) return null;
+    for (final r in _fkOptions[column] ?? const <Map<String, dynamic>>[]) {
+      final rid = r['unidadeid'];
+      if (rid is num && rid == id) {
+        final label = r['unidade']?.toString().trim();
+        return (label == null || label.isEmpty) ? null : label;
+      }
+    }
+    return null;
+  }
+
+  /// Item: custo unitário = valor da compra / (qtde comprada × fator de conversão),
+  /// arredondado a 4 casas. Retorna null se qtde ou fator não forem > 0.
+  double? _computeItemCustoUnitario() {
+    final qtde = _parsePtBrNumber(_ctrls['qtdecomprada']?.text.trim() ?? '');
+    final fator = _parsePtBrNumber(_ctrls['fatorconversao']?.text.trim() ?? '');
+    final valor = _parsePtBrNumber(_ctrls['valorcompra']?.text.trim() ?? '') ?? 0;
+    if (qtde == null || qtde <= 0 || fator == null || fator <= 0) return null;
+    final custo = valor / (qtde * fator);
+    return (custo * 10000).roundToDouble() / 10000;
+  }
+
+  void _recomputeItemCustoUnitario() {
+    final ctrl = _ctrls['custounitario'];
+    if (!_isItem || ctrl == null) return;
+    final custo = _computeItemCustoUnitario();
+    final formatted = custo == null ? '' : _formatPtBrThousands(custo, 4);
+    if (ctrl.text != formatted) ctrl.text = formatted;
+    // Atualiza o card "Qtde comprada (unidade no item)" ao lado da qtde.
+    if (mounted) setState(() {});
+  }
+
+  /// Item: qtde comprada convertida para a unidade do item (qtde × fator).
+  /// Null enquanto qtde ou fator não forem > 0.
+  double? _computeItemQtdeConvertida() {
+    final qtde = _parsePtBrNumber(_ctrls['qtdecomprada']?.text.trim() ?? '');
+    final fator = _parsePtBrNumber(_ctrls['fatorconversao']?.text.trim() ?? '');
+    if (qtde == null || qtde <= 0 || fator == null || fator <= 0) return null;
+    return (qtde * fator).toDouble();
+  }
+
+  /// pt-BR com milhar e 2 a 4 casas (remove zeros finais além da 2ª casa).
+  String _formatPtBrQtde(num value) {
+    var s = _formatPtBrThousands(value, 4);
+    while (s.endsWith('0') && s.length - s.lastIndexOf(',') - 1 > 2) {
+      s = s.substring(0, s.length - 1);
+    }
+    return s;
+  }
+
+  /// Linha do Valor da compra: campo + card verde do custo unitário ao lado,
+  /// para ver o custo sem rolar o formulário.
+  Widget _buildItemValorCompraRow(BuildContext context, CadastroField f) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Campo sempre como 1º filho, para não perder o foco ao reconstruir.
+        Expanded(child: _buildField(context, f)),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(child: _buildItemCustoUnitarioCard(context)),
+      ],
+    );
+  }
+
+  /// Item: custo unitário calculado, exibido como card verde (não editável).
+  /// O valor continua no controller `custounitario` e é recalculado no save.
+  Widget _buildItemCustoUnitarioCard(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    const fg = AppStatusColors.onCalculatedValue;
+    final unidade = _itemUnidadeLabel('unidadeid');
+    final label = unidade == null ? 'Custo unitário (R\$)' : 'Custo unitário (R\$/$unidade)';
+    // Sem dados de compra (ex.: item antigo na edição), mostra o custo gravado
+    // que está no controller até o usuário mexer em qtde/fator/valor.
+    final custo = _computeItemCustoUnitario() ?? _parsePtBrNumber(_ctrls['custounitario']?.text ?? '');
+
+    // Compacto: divide a linha com o campo Valor da compra.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppStatusColors.calculatedValueBackground,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        child: SizedBox(
+          width: double.infinity,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: t.labelSmall?.copyWith(color: fg.withValues(alpha: 0.85)),
+              ),
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  custo == null ? '—' : _formatPtBrCurrencyThousands(custo, 4),
+                  style: t.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Linha da Qtde comprada: campo + card com a qtde na unidade do item (após informar o fator).
+  Widget _buildItemQtdeCompradaRow(BuildContext context, CadastroField f) {
+    final field = _buildField(context, f);
+    final convertida = _computeItemQtdeConvertida();
+    // Sempre um Row com o campo como 1º filho: trocar a estrutura faria o
+    // TextField perder o foco enquanto o usuário digita.
+    if (convertida == null) return Row(children: [Expanded(child: field)]);
+
+    final t = Theme.of(context).textTheme;
+    // Valor calculado (qtde × fator): card verde padrão, texto branco.
+    const fg = AppStatusColors.onCalculatedValue;
+    final unidade = _itemUnidadeLabel('unidadeid');
+    final label = unidade == null ? 'Qtde comprada' : 'Qtde comprada ($unidade)';
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(child: field),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppStatusColors.calculatedValueBackground,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+              child: Column(
+                // Rótulo e valor centralizados (mesmo padrão do card Custo unitário).
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label, textAlign: TextAlign.center, style: t.labelSmall?.copyWith(color: fg.withValues(alpha: 0.85)), overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 2),
+                  Text(_formatPtBrQtde(convertida), textAlign: TextAlign.center, style: t.bodyLarge?.copyWith(color: fg, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   String? _produtoReceitaSelectedUnidade() {
     if (widget.definition.keyName != 'produtoreceita') return null;
     final rawId = _ctrls['receitaid']?.text.trim();
@@ -1353,6 +1560,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     final value = isValid ? raw : null;
 
     return DropdownButtonFormField<String>(
+      autofocus: _autoFocusFor(f),
       value: value,
       isExpanded: true,
       icon: Icon(Icons.keyboard_arrow_down_rounded, color: cs.onSurfaceVariant),
@@ -1384,6 +1592,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     if (raw == 'J' || raw == 'F') value = raw;
 
     return DropdownButtonFormField<String>(
+      autofocus: _autoFocusFor(f),
       value: value,
       isExpanded: true,
       icon: Icon(Icons.keyboard_arrow_down_rounded, color: cs.onSurfaceVariant),
@@ -1453,6 +1662,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     if (raw == 'A' || raw == 'E' || raw == 'U') value = raw;
 
     return DropdownButtonFormField<String>(
+      autofocus: _autoFocusFor(f),
       value: value,
       items: const [
         DropdownMenuItem(value: 'A', child: Text('Administrador')),
@@ -1483,6 +1693,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     if (raw == 'A' || raw == 'I') value = raw;
 
     return DropdownButtonFormField<String>(
+      autofocus: _autoFocusFor(f),
       value: value,
       items: const [
         DropdownMenuItem(value: 'A', child: Text('Ativo')),
@@ -1540,6 +1751,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     }
 
     return DropdownButtonFormField<num>(
+      autofocus: _autoFocusFor(f),
       value: value,
       hint: Text(showNoAvailableItemsHint ? 'Nenhum item disponível' : 'Selecione...'),
       items: options
@@ -1590,7 +1802,12 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
   Widget _buildDefaultField(BuildContext context, CadastroField f) {
     final enabled = (!_isEmpresa || _empresaFieldEnabled(f.column)) && (!_isFornecedor || _fornecedorFieldEnabled(f.column));
     final isCalculatedDespesaVariavelValorMensal = _isDespesaVariavel && f.column == 'valormensal';
-    final readOnly = widget.readOnlyColumns.contains(f.column) || !enabled || isCalculatedDespesaVariavelValorMensal;
+    // Item: custo unitário = valor da compra / (qtde comprada × fator de conversão).
+    final isCalculatedItemCustoUnitario = _isItem && f.column == 'custounitario';
+    final readOnly = widget.readOnlyColumns.contains(f.column) ||
+        !enabled ||
+        isCalculatedDespesaVariavelValorMensal ||
+        isCalculatedItemCustoUnitario;
 
     final isSenha = _isSenhaField(f);
     final obscure = isSenha ? (_obscureByColumn[f.column] ?? true) : false;
@@ -1677,6 +1894,21 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
           inputFormatters = const [
             _PtBrDecimalFormatter(maxIntDigits: 7, decimalDigits: 4, useThousandsSeparator: true),
           ];
+        } else if (_isItem && f.column == 'qtdecomprada') {
+          // Mask: até 99.999.999,99 (pt-BR) -> numeric(10,2)
+          inputFormatters = const [
+            _PtBrDecimalFormatter(maxIntDigits: 8, decimalDigits: 2, useThousandsSeparator: true),
+          ];
+        } else if (_isItem && f.column == 'fatorconversao') {
+          // Mask: até 9.999.999,9999 (pt-BR) -> numeric(11,4)
+          inputFormatters = const [
+            _PtBrDecimalFormatter(maxIntDigits: 7, decimalDigits: 4, useThousandsSeparator: true),
+          ];
+        } else if (_isItem && f.column == 'valorcompra') {
+          // Mask: até 9.999.999.999,99 (pt-BR) -> numeric(12,2)
+          inputFormatters = const [
+            _PtBrDecimalFormatter(maxIntDigits: 10, decimalDigits: 2, useThousandsSeparator: true),
+          ];
 		 } else if (_isRateioDespesa && (f.column == 'valormensal' || f.column == 'totaldespesafixa')) {
 		   // Mask: 0,00 (monetário)
 		   inputFormatters = const [_PtBrCentsFormatter(maxIntDigits: 7)];
@@ -1726,6 +1958,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     return TextField(
       controller: _ctrls[f.column],
       focusNode: (_isDespesaVariavel && f.column == 'valormensal') ? _dvValorMensalFocusNode : null,
+      autofocus: _autoFocusFor(f),
       readOnly: readOnly,
       obscureText: isSenha ? obscure : false,
       minLines: multiline ? 3 : null,
@@ -1749,7 +1982,33 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
                         final base = unidade == null ? f.label : '${f.label} ($unidade)';
                         return f.required ? '$base *' : base;
                       }()
-                    : (f.required ? '${f.label} *' : f.label),
+                    : (_isDespesaVariavel && f.column == 'consumomensal')
+                        ? () {
+                            // Unidade do item selecionado (ex.: "Consumo mensal (gr)").
+                            final unidade = _dvUnidadeLabel;
+                            final base = unidade == null ? f.label : '${f.label} ($unidade)';
+                            return f.required ? '$base *' : base;
+                          }()
+                    : (_isItem && f.column == 'qtdecomprada')
+                        ? () {
+                            final unidade = _itemCompraUnidadeLabel();
+                            final base = unidade == null ? f.label : '${f.label} ($unidade)';
+                            return f.required ? '$base *' : base;
+                          }()
+                        : (_isItem && f.column == 'fatorconversao')
+                            ? () {
+                                // "Fator de conversão de <unidade de compra> -> <unidade no item>"
+                                final unidade = _itemUnidadeLabel('unidadeid') ?? '?';
+                                final compra = _itemCompraUnidadeLabel() ?? '?';
+                                final base = '${f.label} de $compra -> $unidade';
+                                return f.required ? '$base *' : base;
+                              }()
+                            : (_isItem && f.column == 'custounitario')
+                                ? () {
+                                    final unidade = _itemUnidadeLabel('unidadeid');
+                                    return unidade == null ? '${f.label} (R\$)' : '${f.label} (R\$/$unidade)';
+                                  }()
+                                : (f.required ? '${f.label} *' : f.label),
         suffixIcon: suffix,
       ),
     );
@@ -2097,12 +2356,18 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       // status when editing.
       final omitFromUi =
           widget.hiddenColumns.contains(f.column) ||
+          // Item: o custo unitário aparece no card ao lado do Valor da compra.
+          (_isItem && f.column == 'custounitario') ||
           (_isStatusField(f) && !_isEdit) ||
           // Pedido: no cadastramento de uma nova despesa fixa, não exibir a data de atualização.
           // Porém, o campo continua sendo preenchido automaticamente no save via `updatedAtColumn`.
           (_isRateioDespesa && !_isEdit && f.column.toLowerCase() == 'dataatualizacao');
       if (!omitFromUi) {
-        children.add(_buildField(context, f));
+        children.add(switch (f.column) {
+          'qtdecomprada' when _isItem => _buildItemQtdeCompradaRow(context, f),
+          'valorcompra' when _isItem => _buildItemValorCompraRow(context, f),
+          _ => _buildField(context, f),
+        });
 
         // Despesa Variável: após selecionar o Item, exibir detalhes derivados.
         if (_isDespesaVariavel && f.column == 'itemid') {
@@ -2277,10 +2542,32 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
             }
           }
 
+          // Item: qtde comprada e fator de conversão entram no divisor do custo: > 0.
+          if (_isItem && (f.column == 'qtdecomprada' || f.column == 'fatorconversao' || f.column == 'valorcompra')) {
+            if (parsed == null) {
+              _failSave('Valor inválido: ${f.label}');
+              return;
+            }
+            if (parsed <= 0) {
+              _failSave('O campo "${f.label}" deve ser maior que zero.');
+              return;
+            }
+          }
+
           data[f.column] = parsed;
         } else {
           data[f.column] = raw;
         }
+      }
+
+      // Item: custo unitário sempre recalculado a partir dos dados da compra.
+      if (_isItem && !widget.hiddenColumns.contains('custounitario')) {
+        final custo = _computeItemCustoUnitario();
+        if (custo == null) {
+          _failSave('Não foi possível calcular o custo unitário.');
+          return;
+        }
+        data['custounitario'] = custo;
       }
 
       // Imposto e taxas da empresa: regras de inclusão/edição.
@@ -2696,6 +2983,13 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
 
     if (widget.definition.table == 'unidade' && containsConstraint('unidade_unidade_unique')) {
       return 'Já existe uma unidade com este nome. Informe um nome diferente.';
+    }
+
+    // Chave primária duplicada no insert: a sequência do id ficou atrás do maior id
+    // (ex.: registros inseridos com id explícito). Não é dado repetido do usuário.
+    if (!_isEdit && containsConstraint('_pkey')) {
+      return 'Não foi possível gerar o código do novo registro (sequência de IDs do banco desatualizada). '
+          'Avise o administrador para ressincronizar a sequência da tabela ${widget.definition.table}.';
     }
 
     // Generic duplicate-key fallback

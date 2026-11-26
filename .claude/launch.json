@@ -4,8 +4,9 @@
     {
       "name": "bakepro-web",
       "runtimeExecutable": "C:\\src\\flutter\\bin\\flutter.bat",
-      "runtimeArgs": ["run", "-d", "web-server", "--web-port", "8080", "--web-hostname", "localhost"],
-      "port": 8080
+      "runtimeArgs": ["run", "-d", "web-server", "--web-port", "8090", "--web-hostname", "localhost"],
+      "port": 8090,
+      "autoPort": false
     }
   ]
 }

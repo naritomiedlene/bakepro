@@ -102,12 +102,30 @@ class FkDeleteGuard {
 
         // Existence check (limit 1) for any referencing row.
         // OBS: PostgREST não aceita `select=1`; selecionamos a própria coluna da FK.
-        final rows = await SupabaseService.select(
-          ref.referencingTable,
-          select: ref.referencingColumn,
-          filters: filters,
-          limit: 1,
-        );
+        Future<List<Map<String, dynamic>>> query(Map<String, dynamic> f) => SupabaseService.select(
+              ref.referencingTable,
+              select: ref.referencingColumn,
+              filters: f,
+              limit: 1,
+            );
+
+        List<Map<String, dynamic>> rows;
+        try {
+          rows = await query(filters);
+        } catch (e) {
+          // Tabelas-filhas marcadas como "por empresa" que não têm a coluna `empresaid`
+          // (ingrediente, material, compraitem, kitembalagem — a empresa vem do pai).
+          // Erro 42703 (coluna inexistente) bloqueava TODA exclusão de item. Como o id
+          // referenciado é PK única no banco, refazemos a checagem sem o filtro de empresa.
+          // SupabaseService.select relança só a mensagem ("column x.empresaid does not exist").
+          final msg = e.toString();
+          final missingEmpresaCol = filters.containsKey('empresaid') &&
+              ref.referencingColumn != 'empresaid' &&
+              msg.contains('empresaid') &&
+              (msg.contains('42703') || msg.contains('does not exist'));
+          if (!missingEmpresaCol) rethrow;
+          rows = await query({ref.referencingColumn: id});
+        }
         if (rows.isNotEmpty) return FkDeleteDecision.blocked(FkBlockResult(reference: ref));
       }
       return const FkDeleteDecision.allowed();

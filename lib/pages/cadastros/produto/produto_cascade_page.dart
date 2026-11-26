@@ -1,3 +1,4 @@
+import 'package:bakepro/components/action_icon_button.dart';
 import 'package:bakepro/pages/cadastros/cadastro_definitions.dart';
 import 'package:bakepro/pages/cadastros/generic_cadastro_form_sheet.dart';
 import 'package:bakepro/components/confirm_delete_sheet.dart';
@@ -348,16 +349,9 @@ class _ProdutoReceitaCardState extends State<ProdutoReceitaCard> {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              IconButton(
-                tooltip: 'Editar',
-                onPressed: widget.onEdit,
-                icon: Icon(Icons.edit_rounded, color: cs.primary),
-              ),
-              IconButton(
-                tooltip: 'Excluir',
-                onPressed: widget.onDelete,
-                icon: Icon(Icons.delete_outline_rounded, color: cs.error),
-              ),
+              AppActionIconButton.edit(onPressed: widget.onEdit),
+              const SizedBox(width: 6),
+              AppActionIconButton.delete(onPressed: widget.onDelete),
             ],
           ),
         ),
@@ -716,8 +710,8 @@ class _ProdutoHeaderCard extends StatelessWidget {
                     icon: Icons.category_rounded,
                     label: 'Categoria',
                     value: categoriaNome,
-                    backgroundColor: InfoPill.verde,
-                    foregroundColor: Colors.white,
+                    backgroundColor: AppStatusColors.categoriaBackground,
+                    foregroundColor: AppStatusColors.onCategoria,
                   ),
                 InfoPill(icon: Icons.request_quote_rounded, label: 'Custo de produção', value: formatPtBrCurrency(custoProducao)),
                 if (qtdProduzidaText != null && qtdProduzidaText.trim().isNotEmpty)
@@ -828,9 +822,9 @@ class _MiniRowCard extends StatelessWidget {
                 ],
               ),
             ),
-            if (onEdit != null) IconButton(onPressed: onEdit, icon: Icon(Icons.edit_rounded, color: cs.primary), tooltip: 'Editar'),
-            if (onDelete != null)
-              IconButton(onPressed: onDelete, icon: Icon(Icons.delete_outline_rounded, color: cs.error), tooltip: 'Excluir'),
+            if (onEdit != null) AppActionIconButton.edit(onPressed: onEdit),
+            if (onEdit != null && onDelete != null) const SizedBox(width: 6),
+            if (onDelete != null) AppActionIconButton.delete(onPressed: onDelete),
           ],
         ),
       ),

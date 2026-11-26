@@ -1,3 +1,4 @@
+import 'package:bakepro/components/action_icon_button.dart';
 import 'package:bakepro/pages/cadastros/cadastro_definitions.dart';
 import 'package:bakepro/pages/cadastros/generic_cadastro_form_sheet.dart';
 import 'package:bakepro/services/fk_delete_guard.dart';
@@ -251,7 +252,8 @@ class _CompraCard extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(tooltip: 'Excluir', onPressed: onDelete, icon: Icon(Icons.delete_outline_rounded, color: cs.error), visualDensity: VisualDensity.compact),
+              AppActionIconButton.delete(onPressed: onDelete),
+              const SizedBox(width: 4),
               Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
             ],
           ),

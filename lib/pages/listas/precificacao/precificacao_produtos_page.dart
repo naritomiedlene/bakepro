@@ -1,3 +1,4 @@
+import 'package:bakepro/components/count_badge.dart';
 import 'dart:math' as math;
 
 import 'package:bakepro/components/pdf_preview_dialog.dart';
@@ -545,10 +546,8 @@ class _PrecificacaoProdutosPageState extends State<PrecificacaoProdutosPage> {
                               padding: const EdgeInsets.only(top: AppSpacing.xs),
                               child: Align(
                                 alignment: Alignment.centerRight,
-                                child: Text(
-                                  countLabel,
-                                  style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                                ),
+                                // Contador padrão (card abóbora).
+                                child: CountBadge(countLabel),
                               ),
                             ),
                     ),
@@ -657,7 +656,7 @@ class _PrecificacaoProdutosPageState extends State<PrecificacaoProdutosPage> {
                                                                      ? '—'
                                                                      : '${lucroAtualPercent >= 0 ? '+' : '-'}${formatPtBrMoney(lucroAtualPercent.abs())}%';
                                                                  final Color? lucroAtualColor = lucroAtualPercent == null ? null : sellingPriceDefinedColor;
-                                                                 final FontWeight? lucroAtualWeight = lucroAtualPercent == null ? null : FontWeight.w800;
+                                                                 final FontWeight? lucroAtualWeight = lucroAtualPercent == null ? null : FontWeight.normal;
 
                                                                  return _ProdutoPrecificacaoMetrics(
                                                                    availableHeight: c.maxHeight,
@@ -709,7 +708,7 @@ class _PrecificacaoProdutosPageState extends State<PrecificacaoProdutosPage> {
                                                                        ? '—'
                                                                        : '${lucroAtualPercent >= 0 ? '+' : '-'}${formatPtBrMoney(lucroAtualPercent.abs())}%';
                                                                    final Color? lucroAtualColor = lucroAtualPercent == null ? null : sellingPriceDefinedColor;
-                                                                   final FontWeight? lucroAtualWeight = lucroAtualPercent == null ? null : FontWeight.w800;
+                                                                   final FontWeight? lucroAtualWeight = lucroAtualPercent == null ? null : FontWeight.normal;
 
                                                                    return _ProdutoPrecificacaoMetrics(
                                                                      availableHeight: c.maxHeight,
@@ -831,7 +830,7 @@ class _ProdutoPrecificacaoTile extends StatelessWidget {
     // Keep the same visual language as "Preço venda definido" (user request):
     // the percentage may be positive/negative, but we keep the same accent color.
     final Color? lucroAtualColor = lucroAtualPercent == null ? null : sellingPriceDefinedColor;
-    final FontWeight? lucroAtualWeight = lucroAtualPercent == null ? null : FontWeight.w800;
+    final FontWeight? lucroAtualWeight = lucroAtualPercent == null ? null : FontWeight.normal;
 
     final hasCategoria = row.categoriaNome.isNotEmpty;
     final producaoLabel = 'Produção mensal prevista ${_formatPtBrQty(row.quantidadeProducaoMes)}';
@@ -958,20 +957,22 @@ class _ProdutoPrecificacaoHeader extends StatelessWidget {
                             ),
                           ),
                         ),
-                        // Card "Categoria" em verde (mesmo padrão da classificação na lista de kits).
+                        // Card "Categoria" em azul-ardósia (mesmo padrão da classificação na lista de kits).
                         if (hasCategoria)
                           _Pill(
                             text: 'Categoria: ${row.categoriaNome}',
-                            background: Colors.green.shade700,
-                            foreground: Colors.white,
+                            background: AppStatusColors.categoriaBackground,
+                            foreground: AppStatusColors.onCategoria,
                             dense: true,
+                            fontWeight: FontWeight.normal,
                           ),
                       ],
                     ),
                   ),
                   if (positionText.isNotEmpty) ...[
                     const SizedBox(width: 10),
-                    _Pill(text: positionText, background: cs.secondaryContainer, foreground: cs.onSecondaryContainer, dense: true),
+                    // Posição na lista (registro/total): mesmo card abóbora do contador.
+                    CountBadge(positionText, dense: true),
                   ],
                   const SizedBox(width: 10),
                   _HorizontalScrollRow(
@@ -1083,20 +1084,20 @@ class _ProdutoPrecificacaoMetrics extends StatelessWidget {
         final rawPerRow = (availableHeight - rowGap - safetyPx) / 2;
         final perRowHeight = (rawPerRow.isFinite ? rawPerRow : 72.0).clamp(0.0, 92.0);
         final firstLine = [
-          _Metric(height: perRowHeight, label: 'Custo de produção', value: formatPtBrCurrency(row.custoProducao), dense: true),
+          _Metric(height: perRowHeight, label: 'Custo de produção', value: formatPtBrCurrency(row.custoProducao), dense: true, calculated: true),
           _Metric(
             height: perRowHeight,
             label: 'Qtd produzida',
             value: qtd % 1 == 0 ? qtd.toStringAsFixed(0) : formatPtBrMoney(qtd),
             dense: true,
           ),
-          _Metric(height: perRowHeight, label: 'Custo produção / un.', value: formatPtBrCurrency(row.custoUnitario), dense: true),
-          _Metric(height: perRowHeight, label: 'Despesa fixa / un.', value: formatPtBrCurrency(row.despesaFixaPorUnidade), dense: true),
-          _Metric(height: perRowHeight, label: 'Despesa variável / un.', value: formatPtBrCurrency(row.despesaVariavelPorUnidade), dense: true),
+          _Metric(height: perRowHeight, label: 'Custo produção / un.', value: formatPtBrCurrency(row.custoUnitario), dense: true, calculated: true),
+          _Metric(height: perRowHeight, label: 'Despesa fixa / un.', value: formatPtBrCurrency(row.despesaFixaPorUnidade), dense: true, calculated: true),
+          _Metric(height: perRowHeight, label: 'Despesa variável / un.', value: formatPtBrCurrency(row.despesaVariavelPorUnidade), dense: true, calculated: true),
         ];
 
         final secondLine = [
-          _Metric(height: perRowHeight, label: 'Preço venda calculado R\$/un.', value: formatPtBrCurrency(precoVendaCalculado), dense: true),
+          _Metric(height: perRowHeight, label: 'Preço venda calculado R\$/un.', value: formatPtBrCurrency(precoVendaCalculado), dense: true, calculated: true),
           _Metric(
             height: perRowHeight,
             label: 'Preço venda definido R\$/un.',
@@ -1113,6 +1114,7 @@ class _ProdutoPrecificacaoMetrics extends StatelessWidget {
             valueColor: lucroAtualColor,
             valueWeight: lucroAtualWeight,
             dense: true,
+            calculated: true,
           ),
           _Metric(
             height: perRowHeight,
@@ -1178,7 +1180,16 @@ class _MetricHorizontalRow extends StatelessWidget {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value, this.height, this.labelColor, this.valueColor, this.valueWeight, this.dense = false});
+  const _Metric({
+    required this.label,
+    required this.value,
+    this.height,
+    this.labelColor,
+    this.valueColor,
+    this.valueWeight,
+    this.dense = false,
+    this.calculated = false,
+  });
   final String label;
   final String value;
   final double? height;
@@ -1187,10 +1198,16 @@ class _Metric extends StatelessWidget {
   final FontWeight? valueWeight;
   final bool dense;
 
+  /// Valor calculado pelo app: card verde padrão com texto branco (ignora as cores
+  /// de rótulo/valor, que não teriam contraste sobre o verde).
+  final bool calculated;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final labelColor = calculated ? AppStatusColors.onCalculatedValue.withValues(alpha: 0.85) : this.labelColor;
+    final valueColor = calculated ? AppStatusColors.onCalculatedValue : this.valueColor;
     final h = height ?? 72.0;
     // Important: this widget is used inside a fixed-height row.
     // Even tiny rounding differences in font metrics can trigger overflows by 1-2px.
@@ -1206,18 +1223,19 @@ class _Metric extends StatelessWidget {
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
         decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest,
+          color: calculated ? AppStatusColors.calculatedValueBackground : cs.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
         ),
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            // Rótulo e valor centralizados (padrão do card Custo unitário do item).
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               FittedBox(
                 fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
+                alignment: Alignment.center,
                 child: Text(
                   label,
                   maxLines: 1,
@@ -1232,13 +1250,14 @@ class _Metric extends StatelessWidget {
               SizedBox(height: gap),
               FittedBox(
                 fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
+                alignment: Alignment.center,
                 child: Text(
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: (dense ? theme.textTheme.titleSmall : theme.textTheme.titleMedium)?.copyWith(
-                    fontWeight: valueWeight ?? FontWeight.w800,
+                    // Peso normal (mesma leveza dos cards verdes); antes w800.
+                    fontWeight: valueWeight ?? FontWeight.normal,
                     color: valueColor ?? cs.onSurface,
                     height: 1.0,
                     fontSize: valueFont,
@@ -1279,11 +1298,20 @@ String _formatPtBrQty(double? v) {
 }
 
 class _Pill extends StatelessWidget {
-  const _Pill({required this.text, required this.background, required this.foreground, this.dense = false});
+  const _Pill({
+    required this.text,
+    required this.background,
+    required this.foreground,
+    this.dense = false,
+    this.fontWeight = FontWeight.w700,
+  });
   final String text;
   final Color background;
   final Color foreground;
   final bool dense;
+
+  /// Card verde (Categoria) usa peso normal: texto branco sobre verde escuro parece mais grosso.
+  final FontWeight fontWeight;
 
   @override
   Widget build(BuildContext context) {
@@ -1295,7 +1323,7 @@ class _Pill extends StatelessWidget {
         text,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.labelSmall?.copyWith(color: foreground, fontWeight: FontWeight.w700, height: 1.15),
+        style: theme.textTheme.labelSmall?.copyWith(color: foreground, fontWeight: fontWeight, height: 1.15),
       ),
     );
   }

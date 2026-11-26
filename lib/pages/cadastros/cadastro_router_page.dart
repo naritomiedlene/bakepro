@@ -1,6 +1,5 @@
 import 'package:bakepro/pages/cadastros/generic_cadastro_list_page.dart';
 import 'package:bakepro/pages/cadastros/cadastro_definitions.dart';
-import 'package:bakepro/pages/cadastros/setup/setup_page.dart';
 import 'package:bakepro/services/state/app_session_controller.dart';
 import 'package:bakepro/theme.dart';
 import 'package:flutter/material.dart';
@@ -21,10 +20,6 @@ class CadastroRouterPage extends StatelessWidget {
     final def = Cadastros.byKey(resolved);
     if (def == null) {
       return _UnknownCadastro(entity: resolved);
-    }
-
-    if (def.keyName == 'setup') {
-      return SetupPage(definition: def);
     }
 
     // Empresa + Usuário: somente administradores (A/E) podem acessar.
@@ -119,7 +114,6 @@ class CadastroOperacionalIndexPage extends StatelessWidget {
       'categoria',
       'delivery',
       'empresataxas',
-      'setup',
     ];
     // Opção 1: “Produto com Receita” (produto) deve aparecer depois de Receita.
     const operationalCadastrosOrder = <String>[
@@ -217,7 +211,6 @@ class _CadastrosIndex extends StatelessWidget {
       'delivery',
       // 'empresadelivery' fica somente em Cadastro operacional.
       'empresataxas',
-      'setup',
     ];
     // Extra safety: some entities are internal/nested and should never be shown here.
     final allVisibleCadastros = Cadastros.all

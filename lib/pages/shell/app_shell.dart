@@ -483,7 +483,9 @@ class _DrawerItem extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: InkWell(
         onTap: () {
-          context.pop();
+          // Fecha o Drawer explicitamente. `context.pop()` (go_router) desempilhava a
+          // página do topo (ex.: lista aberta via push) em vez do Drawer, exigindo 2 cliques.
+          Scaffold.maybeOf(context)?.closeDrawer();
           onTap();
         },
         borderRadius: BorderRadius.circular(AppRadius.lg),

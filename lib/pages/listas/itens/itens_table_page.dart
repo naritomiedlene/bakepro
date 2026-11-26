@@ -1,3 +1,8 @@
+import 'package:bakepro/components/action_icon_button.dart';
+import 'package:bakepro/components/count_badge.dart';
+import 'package:bakepro/components/info_pill.dart';
+import 'package:bakepro/components/stacked_list_actions.dart';
+import 'package:bakepro/utils/number_parsing.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -423,44 +428,64 @@ class _ItensTablePageState extends State<ItensTablePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Cabeçalho no padrão das listas de cadastro: voltar, título e "Atualizar".
+            IconButton(
+              onPressed: () => context.pop(),
+              icon: const Icon(Icons.arrow_back_rounded),
+              tooltip: 'Voltar',
+            ),
             Row(
               children: [
-                IconButton(
-                  onPressed: () => context.pop(),
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  tooltip: 'Voltar',
-                ),
-                const SizedBox(width: AppSpacing.xs),
                 Expanded(child: Text('Itens', style: theme.textTheme.headlineSmall)),
-                IconButton(
-                  tooltip: 'Atualizar',
-                  onPressed: _loading ? null : _load,
-                  icon: Icon(Icons.refresh_rounded, color: cs.onSurface),
-                ),
+                StackedListActions(isLoading: _loading, onRefresh: _load),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
-              controller: _filterCtrl,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                labelText: 'Filtrar por nome',
-                hintText: 'Digite parte do nome (ex: farinha)',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _filterCtrl.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Limpar filtro',
-                        onPressed: () {
-                          _filterCtrl.clear();
-                          FocusScope.of(context).unfocus();
-                          setState(() => _applyFilterAndSort());
-                        },
-                        icon: const Icon(Icons.close_rounded),
+            // Filtro no padrão das listas de cadastro (caixa arredondada com lupa).
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: AppSpacing.sm),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.xl),
+                  border: Border.all(color: cs.outline.withValues(alpha: 0.14)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 6),
+                  child: Row(
+                    children: [
+                      Icon(Icons.search_rounded, size: 18, color: cs.onSurfaceVariant),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _filterCtrl,
+                          textInputAction: TextInputAction.search,
+                          decoration: InputDecoration(
+                            hintText: 'Filtrar itens pelo nome',
+                            border: InputBorder.none,
+                            isDense: true,
+                            hintStyle: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                          ),
+                          style: theme.textTheme.bodyMedium,
+                        ),
                       ),
+                      if (_filterCtrl.text.isNotEmpty)
+                        IconButton(
+                          tooltip: 'Limpar filtro',
+                          onPressed: () {
+                            _filterCtrl.clear();
+                            FocusScope.of(context).unfocus();
+                            setState(() => _applyFilterAndSort());
+                          },
+                          icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant, size: 18),
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                          padding: EdgeInsets.zero,
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
             Expanded(child: content),
           ],
         ),
@@ -477,41 +502,23 @@ class _ItensList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.7)),
-        ),
-        child: CustomScrollView(
+    // Padrão das listas de cadastro: contador abóbora à direita e cards soltos.
+    return CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-                child: Row(
-                  children: [
-                    Icon(Icons.inventory_2_outlined, color: cs.primary),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        'Itens (${rows.length})',
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                  ],
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: CountBadge(rows.length == 1 ? '1 item' : '${rows.length} itens'),
                 ),
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              padding: EdgeInsets.zero,
               sliver: SliverList.separated(
                 itemCount: rows.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
                 itemBuilder: (context, i) => _ItemCard(
                   row: rows[i],
                   onTap: () {
@@ -527,8 +534,6 @@ class _ItensList extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
     );
   }
 }
@@ -554,93 +559,62 @@ class _ItemCard extends StatelessWidget {
     final dataAtualizacao = row['dataatualizacao'];
     final dataAtualizacaoFmt = _formatBrDateTime(dataAtualizacao);
 
-    final subtitleBits = <String>[];
-    if (tipo.isNotEmpty && tipo != 'null') subtitleBits.add(tipo);
-    if (marca.isNotEmpty && marca != 'null') subtitleBits.add(marca);
-    if (unidade.isNotEmpty && unidade != 'null') subtitleBits.add('Unid: $unidade');
+    bool has(String s) => s.isNotEmpty && s != 'null';
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        splashFactory: NoSplash.splashFactory,
-        highlightColor: cs.primary.withValues(alpha: 0.06),
-        hoverColor: cs.primary.withValues(alpha: 0.04),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: cs.surface,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      nome.isEmpty ? '—' : nome,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, height: 1.15),
-                    ),
+    // Padrão das listas de cadastro: card com nome + lápis na 1ª linha e os
+    // dados em cards (InfoPill) na 2ª; custo (calculado) no verde padrão.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(color: cs.outline.withValues(alpha: 0.14)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    nome.isEmpty ? '—' : nome,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall,
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      _MetricPill(label: 'Custo', value: custoUnitFmt),
-                      _MetricPill(icon: Icons.update_rounded, label: 'Atualização', value: dataAtualizacaoFmt),
-                    ],
-                  ),
-                ],
-              ),
-              if (subtitleBits.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        subtitleBits.join(' • '),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.25),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    _EditLink(onTap: onTap),
-                  ],
                 ),
+                const SizedBox(width: AppSpacing.sm),
+                AppActionIconButton.edit(onPressed: onTap),
               ],
-              if (subtitleBits.isEmpty) ...[
-                const SizedBox(height: 10),
-                Align(alignment: Alignment.centerRight, child: _EditLink(onTap: onTap)),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: 6,
+              children: [
+                if (has(unidade)) InfoPill(icon: Icons.straighten_rounded, label: 'Unid', value: unidade),
+                if (has(marca)) InfoPill(icon: Icons.sell_rounded, label: 'Marca', value: marca),
+                if (has(tipo)) InfoPill(icon: Icons.category_rounded, label: 'Tipo', value: tipo),
+                InfoPill(icon: Icons.request_quote_rounded, label: 'Custo unit.', value: custoUnitFmt, calculated: true),
+                InfoPill(icon: Icons.update_rounded, label: 'Atualização', value: dataAtualizacaoFmt),
               ],
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  String _formatCusto(dynamic v) {
-    if (v == null) return '—';
-    if (v is num) return v.toStringAsFixed(4);
-    final parsed = num.tryParse(v.toString().replaceAll(',', '.'));
-    return parsed == null ? v.toString() : parsed.toStringAsFixed(4);
-  }
-
+  /// Custo em pt-BR com 4 casas e milhar (ex.: "R$ 0,2100/Grama"), como na lista de cadastro.
   String _formatCustoPerUnidade(dynamic v, String unidadeNome) {
-    final base = _formatCusto(v);
-    if (base == '—') return base;
-
+    final n = parsePtBrNumber(v);
+    if (n == null) return '—';
+    final base = formatPtBrCurrency(n, decimalDigits: 4);
     final u = unidadeNome.trim();
-    if (u.isEmpty || u == 'null') return 'R\$ $base';
-    return 'R\$ $base / $u';
+    if (u.isEmpty || u == 'null') return base;
+    return '$base/$u';
   }
 
   String _formatBrDateTime(dynamic v) {
@@ -661,72 +635,6 @@ class _ItemCard extends StatelessWidget {
     final hh = d.hour.toString().padLeft(2, '0');
     final min = d.minute.toString().padLeft(2, '0');
     return '$dd/$mm/$yyyy $hh:$min';
-  }
-}
-
-class _EditLink extends StatelessWidget {
-  const _EditLink({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return InkWell(
-      onTap: onTap,
-      splashFactory: NoSplash.splashFactory,
-      highlightColor: cs.primary.withValues(alpha: 0.06),
-      hoverColor: cs.primary.withValues(alpha: 0.04),
-      borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Text(
-          'Editar',
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: cs.primary,
-            fontWeight: FontWeight.w800,
-            decoration: TextDecoration.underline,
-            decorationColor: cs.primary.withValues(alpha: 0.55),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MetricPill extends StatelessWidget {
-  const _MetricPill({this.icon, required this.label, required this.value});
-
-  final IconData? icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 16, color: cs.primary),
-            const SizedBox(width: 6),
-          ],
-          Text(label, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
-          const SizedBox(width: 6),
-          Text(value, style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w800)),
-        ],
-      ),
-    );
   }
 }
 
@@ -1346,7 +1254,8 @@ class _TablePager extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Text(label, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          // Contador/posição padrão (card abóbora).
+          CountBadge(label),
           const Spacer(),
           Text('Linhas:', style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
           const SizedBox(width: 8),
@@ -1362,7 +1271,8 @@ class _TablePager extends StatelessWidget {
             onPressed: canPrev ? onPrev : null,
             icon: Icon(Icons.chevron_left_rounded, color: canPrev ? cs.onSurface : cs.onSurfaceVariant),
           ),
-          Text('${pageIndex + 1}/$totalPages', style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          // Página atual / total de páginas: mesmo card abóbora.
+          CountBadge('${pageIndex + 1}/$totalPages', dense: true),
           IconButton(
             tooltip: 'Próxima página',
             onPressed: canNext ? onNext : null,

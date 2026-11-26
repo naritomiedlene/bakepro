@@ -9,8 +9,11 @@ double? parsePtBrNumber(dynamic raw) {
   final s0 = raw.toString().trim();
   if (s0.isEmpty) return null;
 
+  // Pontos em grupos de 3 sem vírgula ("1.000") são milhar pt-BR, não decimal.
+  final isPtBrThousandsOnly = RegExp(r'^-?\d{1,3}(\.\d{3})+$').hasMatch(s0);
+
   // Fast path: standard dot-decimal.
-  final direct = double.tryParse(s0);
+  final direct = isPtBrThousandsOnly ? null : double.tryParse(s0);
   if (direct != null) return direct;
 
   // pt-BR normalization: remove thousand separators '.' and swap ',' -> '.'

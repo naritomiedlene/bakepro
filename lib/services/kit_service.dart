@@ -54,7 +54,7 @@ class KitService {
     });
   }
 
-  /// Descarta o empresasetup em cache (chamar após salvar o Setup).
+  /// Descarta o empresasetup em cache (chamar após salvar "Imposto e taxas da empresa").
   static void clearEmpresaSetupCache() => _setupByEmpresa.clear();
 
   Future<num?> _loadTaxaAdmPct(int empresaId) async =>

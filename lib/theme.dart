@@ -164,6 +164,20 @@ class AppStatusColors {
   /// Dark mode: lighter green for contrast on dark surfaces.
   static const sellingPriceDefinedLight = Color(0xFF1B5E20);
   static const sellingPriceDefinedDark = Color(0xFF66BB6A);
+
+  /// Verde padrão dos cards de valor calculado (custo unitário do item, totais,
+  /// precificação). Mesmo tom nos dois temas; texto em [onCalculatedValue].
+  static const calculatedValueBackground = Color(0xFF1B5E20);
+  static const onCalculatedValue = Color(0xFFFFFFFF);
+
+  /// Azul-ardósia dos cards de Categoria (produto) e Classificação (kit).
+  /// Mesmo tom nos dois temas; texto em [onCategoria].
+  static const categoriaBackground = Color(0xFF3C4F7A);
+  static const onCategoria = Color(0xFFFFFFFF);
+
+  /// Âmbar do botão "Materiais" da receita (diferente de editar/excluir/ingredientes).
+  static const materiaisActionLight = Color(0xFF9A6700);
+  static const materiaisActionDark = Color(0xFFFFC66B);
 }
 
 /// Font size constants

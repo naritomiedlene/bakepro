@@ -119,6 +119,8 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                             const SizedBox(height: AppSpacing.lg),
                             TextField(
                               controller: _emailCtrl,
+                              // Cursor no primeiro campo ao abrir.
+                              autofocus: true,
                               keyboardType: TextInputType.emailAddress,
                               textCapitalization: TextCapitalization.none,
                               autocorrect: false,

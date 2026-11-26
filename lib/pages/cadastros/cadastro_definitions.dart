@@ -417,14 +417,29 @@ class Cadastros {
         ),
         CadastroField(
           column: 'unidadeid',
-          label: 'Unidade',
+          label: 'Unidade no item',
           type: CadastroFieldType.number,
           required: true,
           fk: CadastroForeignKey(table: 'unidade', idColumn: 'unidadeid', labelColumn: 'unidade', scopedByEmpresa: false),
         ),
+        // Dados da compra do item, base do cálculo do custo unitário.
+        CadastroField(
+          column: 'compraunidadeid',
+          label: 'Unidade de compra',
+          type: CadastroFieldType.number,
+          required: false,
+          fk: CadastroForeignKey(table: 'unidade', idColumn: 'unidadeid', labelColumn: 'unidade', scopedByEmpresa: false),
+        ),
+        // O rótulo ganha a unidade de compra selecionada no formulário. Deve ser > 0.
+        CadastroField(column: 'qtdecomprada', label: 'Qtde comprada', type: CadastroFieldType.number, required: true),
+        // Divisor do cálculo do custo: deve ser > 0.
+        CadastroField(column: 'fatorconversao', label: 'Fator de conversão', type: CadastroFieldType.number, required: true),
+        // Dividendo do cálculo do custo: obrigatório e > 0.
+        CadastroField(column: 'valorcompra', label: 'Valor da compra (R\$)', type: CadastroFieldType.number, required: true),
         // Único custo do item (a coluna `custounitarioinicial` foi removida).
         // Usado em receitas, kits, despesas variáveis e importação de compras.
-        CadastroField(column: 'custounitario', label: 'Custo unitário', type: CadastroFieldType.number, required: true),
+        // Calculado no formulário: valorcompra / (qtdecomprada * fatorconversao); não editável.
+        CadastroField(column: 'custounitario', label: 'Custo unitário', type: CadastroFieldType.number, required: false),
       ],
     ),
     CadastroDefinition(
@@ -492,22 +507,8 @@ class Cadastros {
       ],
     ),
 
-    // Registro único (por empresa) com parâmetros globais do sistema.
-    CadastroDefinition(
-      keyName: 'setup',
-      title: 'Setup',
-      table: 'empresasetup',
-      // Observação: o fluxo de UI não usa lista nem exclusão; a tela de Setup
-      // faz upsert/atualização usando as chaves disponíveis.
-      idColumn: 'empresasetupid',
-      scopedByEmpresa: true,
-      visibleInMenu: true,
-      displayColumns: ['taxaadm', 'imposto'],
-      fields: [
-        CadastroField(column: 'taxaadm', label: 'Taxa administrativo (%)', type: CadastroFieldType.number, required: true),
-        CadastroField(column: 'imposto', label: 'Imposto de renda (%)', type: CadastroFieldType.number, required: true),
-      ],
-    ),
+    // Setup removido: imposto e taxas da empresa (tabela `empresasetup`) são
+    // mantidos somente em "Imposto e taxas da empresa" (keyName `empresataxas`).
 
     CadastroDefinition(
       keyName: 'categoria',
@@ -759,7 +760,6 @@ class Cadastros {
     'item': Icons.inventory_2_rounded,
     'rateiodespesa': Icons.account_balance_wallet_rounded,
     'despesavariavel': Icons.payments_rounded,
-    'setup': Icons.settings_rounded,
     'categoria': Icons.category_outlined,
     'produto': Icons.local_offer_rounded,
     'kit': Icons.card_giftcard_rounded,
