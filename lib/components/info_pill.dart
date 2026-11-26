@@ -13,6 +13,9 @@ class InfoPill extends StatelessWidget {
     this.backgroundColor,
     this.foregroundColor,
     this.calculated = false,
+    this.total = false,
+    this.borderColor,
+    this.borderWidth,
   });
 
   final IconData? icon;
@@ -24,6 +27,14 @@ class InfoPill extends StatelessWidget {
   /// padrão ([AppStatusColors.calculatedValueBackground]) com texto branco.
   final bool calculated;
 
+  /// Total calculado (conta sobre outros valores calculados): card ameixa com
+  /// borda dourado-mel ([AppStatusColors.totalCalculadoBorder]). Implica [calculated].
+  final bool total;
+
+  /// Borda opcional (usada pelo destaque de [total]).
+  final Color? borderColor;
+  final double? borderWidth;
+
   /// Cores opcionais (ex.: categoria/classificação em azul-ardósia). Sobrepõem o padrão.
   final Color? backgroundColor;
   final Color? foregroundColor;
@@ -34,13 +45,16 @@ class InfoPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    if (calculated) {
+    if (calculated || total) {
       return InfoPill(
-        icon: icon,
+        // Valor calculado: sempre o mesmo ícone (papel com "$").
+        icon: AppIcons.valorCalculado,
         label: label,
         value: value,
         backgroundColor: AppStatusColors.calculatedValueBackground,
         foregroundColor: AppStatusColors.onCalculatedValue,
+        borderColor: total ? AppStatusColors.totalCalculadoBorder : null,
+        borderWidth: total ? AppStatusColors.totalCalculadoBorderWidth : null,
       );
     }
     final bg = backgroundColor ??
@@ -56,7 +70,10 @@ class InfoPill extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.28)),
+        border: Border.all(
+          color: borderColor ?? colorScheme.outlineVariant.withValues(alpha: 0.28),
+          width: borderWidth ?? 1,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),

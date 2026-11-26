@@ -155,6 +155,26 @@ class AppBrandColors {
   static const onTerracotta = Color(0xFFFFFFFF);
 }
 
+/// Estilo padrão do menu de opções dos combos (DropdownButton/FormField).
+/// O menu do Flutter não aceita borda; para delimitá-lo do fundo da tela/formulário
+/// usamos o fundo dos cards (surfaceContainerHighest) e cantos arredondados.
+class AppDropdownStyle {
+  static Color menuColor(BuildContext context) => Theme.of(context).colorScheme.surfaceContainerHighest;
+  static final BorderRadius menuRadius = BorderRadius.circular(AppRadius.lg);
+
+  /// Fonte das opções (um pouco menor que o padrão titleMedium de 16px).
+  /// O Flutter usa o mesmo estilo para o valor selecionado no campo.
+  static TextStyle? menuTextStyle(BuildContext context) =>
+      Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface);
+}
+
+/// Ícones padronizados do app.
+class AppIcons {
+  /// Ícone de todo card de valor calculado (papel com "$"), junto do fundo ameixa
+  /// [AppStatusColors.calculatedValueBackground].
+  static const valorCalculado = Icons.request_quote_rounded;
+}
+
 /// Semantic/status colors shared across the app.
 /// Keep these outside individual widgets to avoid hardcoding UI colors.
 class AppStatusColors {
@@ -170,6 +190,19 @@ class AppStatusColors {
   /// (Antes verde #1B5E20.)
   static const calculatedValueBackground = Color(0xFF5B3A66);
   static const onCalculatedValue = Color(0xFFFFFFFF);
+
+  /// Borda dourado-mel (2px) dos cards de TOTAL calculado — resultado de contas
+  /// sobre outros valores calculados (valor total do kit, custo de produção,
+  /// preço calculado...). Fundo continua [calculatedValueBackground].
+  static const totalCalculadoBorder = Color(0xFFE6B85C);
+  static const double totalCalculadoBorderWidth = 2;
+
+  /// Lucro atual (Precificação), conforme o estado:
+  /// - prejuízo (lucro < 0): bordô;
+  /// - atenção (0 ≤ lucro < margem de lucro da categoria): âmbar;
+  /// - normal: ameixa padrão de valor calculado. Texto branco nos três.
+  static const lucroPrejuizoBackground = Color(0xFF7A1F2B);
+  static const lucroAtencaoBackground = Color(0xFF7A4E00);
 
   /// Azul-ardósia dos cards de Categoria (produto) e Classificação (kit).
   /// Mesmo tom nos dois temas; texto em [onCategoria].

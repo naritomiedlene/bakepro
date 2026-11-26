@@ -1325,9 +1325,12 @@ class _RowsPerPageDropdown extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10),
         child: DropdownButton<int>(
+          // Menu de opções delimitado (fundo de card + cantos arredondados).
+          dropdownColor: AppDropdownStyle.menuColor(context),
+          borderRadius: AppDropdownStyle.menuRadius,
+          style: AppDropdownStyle.menuTextStyle(context),
           value: value,
           underline: const SizedBox.shrink(),
-          borderRadius: BorderRadius.circular(12),
           items: [
             for (final v in items)
               DropdownMenuItem<int>(

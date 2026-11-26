@@ -301,16 +301,19 @@ class _ProdutoReceitaCardState extends State<ProdutoReceitaCard> {
         : (qtdTotalReceita % 1 == 0 ? qtdTotalReceita.toStringAsFixed(0) : formatPtBrMoney(qtdTotalReceita, decimalDigits: 4));
 
     final pills = <Widget>[
-      InfoPill(icon: Icons.scale_rounded, label: 'Qtd no produto', value: comUnidade(qtdText)),
-      if (custoReceita != null)
-        InfoPill(icon: Icons.receipt_long_rounded, label: 'Custo total da receita', value: formatPtBrCurrency(custoReceita)),
+      // Ordem: dados da receita (qtd total → custo total) e depois do produto
+      // (qtd no produto → custo no produto).
       if (qtdTotalText != null) InfoPill(icon: Icons.inventory_rounded, label: 'Qtd total da receita', value: comUnidade(qtdTotalText)),
+      if (custoReceita != null)
+        InfoPill(icon: Icons.receipt_long_rounded, label: 'Custo total da receita', value: formatPtBrCurrency(custoReceita), calculated: true),
+      InfoPill(icon: Icons.scale_rounded, label: 'Qtd no produto', value: comUnidade(qtdText)),
       if (custoNoProduto != null)
         InfoPill(
           icon: Icons.request_quote_rounded,
           label: 'Custo no produto',
           value: formatPtBrCurrency(custoNoProduto),
-          emphasize: true,
+          // Total: qtd no produto × custo da receita ÷ qtd total da receita.
+          total: true,
         ),
     ];
 
@@ -713,11 +716,11 @@ class _ProdutoHeaderCard extends StatelessWidget {
                     backgroundColor: AppStatusColors.categoriaBackground,
                     foregroundColor: AppStatusColors.onCategoria,
                   ),
-                InfoPill(icon: Icons.request_quote_rounded, label: 'Custo de produção', value: formatPtBrCurrency(custoProducao)),
+                InfoPill(icon: Icons.request_quote_rounded, label: 'Custo de produção', value: formatPtBrCurrency(custoProducao), total: true),
                 if (qtdProduzidaText != null && qtdProduzidaText.trim().isNotEmpty)
                   InfoPill(icon: Icons.inventory_rounded, label: 'Qtd produzida', value: qtdProduzidaText),
                 if (custoTotalReceitasNum != null)
-                  InfoPill(icon: Icons.receipt_long_rounded, label: 'Custo total das receitas', value: formatPtBrCurrency(custoTotalReceitasNum)),
+                  InfoPill(icon: Icons.receipt_long_rounded, label: 'Custo total das receitas', value: formatPtBrCurrency(custoTotalReceitasNum), total: true),
               ],
             ),
           ],

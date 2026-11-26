@@ -1448,10 +1448,12 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     final custo = _computeItemCustoUnitario() ?? _parsePtBrNumber(_ctrls['custounitario']?.text ?? '');
 
     // Compacto: divide a linha com o campo Valor da compra.
+    // Total calculado (valor ÷ (qtde × fator)): ameixa com borda dourado-mel.
     return DecoratedBox(
       decoration: BoxDecoration(
         color: AppStatusColors.calculatedValueBackground,
         borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppStatusColors.totalCalculadoBorder, width: AppStatusColors.totalCalculadoBorderWidth),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
@@ -1561,6 +1563,10 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     final value = isValid ? raw : null;
 
     return DropdownButtonFormField<String>(
+             // Menu de opções delimitado (fundo de card + cantos arredondados).
+             dropdownColor: AppDropdownStyle.menuColor(context),
+             borderRadius: AppDropdownStyle.menuRadius,
+             style: AppDropdownStyle.menuTextStyle(context),
       autofocus: _autoFocusFor(f),
       value: value,
       isExpanded: true,
@@ -1593,6 +1599,10 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     if (raw == 'J' || raw == 'F') value = raw;
 
     return DropdownButtonFormField<String>(
+             // Menu de opções delimitado (fundo de card + cantos arredondados).
+             dropdownColor: AppDropdownStyle.menuColor(context),
+             borderRadius: AppDropdownStyle.menuRadius,
+             style: AppDropdownStyle.menuTextStyle(context),
       autofocus: _autoFocusFor(f),
       value: value,
       isExpanded: true,
@@ -1663,6 +1673,10 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     if (raw == 'A' || raw == 'E' || raw == 'U') value = raw;
 
     return DropdownButtonFormField<String>(
+             // Menu de opções delimitado (fundo de card + cantos arredondados).
+             dropdownColor: AppDropdownStyle.menuColor(context),
+             borderRadius: AppDropdownStyle.menuRadius,
+             style: AppDropdownStyle.menuTextStyle(context),
       autofocus: _autoFocusFor(f),
       value: value,
       items: const [
@@ -1694,6 +1708,10 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     if (raw == 'A' || raw == 'I') value = raw;
 
     return DropdownButtonFormField<String>(
+             // Menu de opções delimitado (fundo de card + cantos arredondados).
+             dropdownColor: AppDropdownStyle.menuColor(context),
+             borderRadius: AppDropdownStyle.menuRadius,
+             style: AppDropdownStyle.menuTextStyle(context),
       autofocus: _autoFocusFor(f),
       value: value,
       items: const [
@@ -1752,6 +1770,10 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     }
 
     return DropdownButtonFormField<num>(
+             // Menu de opções delimitado (fundo de card + cantos arredondados).
+             dropdownColor: AppDropdownStyle.menuColor(context),
+             borderRadius: AppDropdownStyle.menuRadius,
+             style: AppDropdownStyle.menuTextStyle(context),
       autofocus: _autoFocusFor(f),
       value: value,
       hint: Text(showNoAvailableItemsHint ? 'Nenhum item disponível' : 'Selecione...'),

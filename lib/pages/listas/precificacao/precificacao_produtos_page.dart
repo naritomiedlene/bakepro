@@ -665,6 +665,7 @@ class _PrecificacaoProdutosPageState extends State<PrecificacaoProdutosPage> {
                                                                    precoVendaCalculado: precoVendaCalculado,
                                                                    sellingPriceDefinedColor: sellingPriceDefinedColor,
                                                                    lucroAtualText: lucroAtualText,
+                lucroAtualPercent: lucroAtualPercent,
                                                                    lucroAtualColor: lucroAtualColor,
                                                                    lucroAtualWeight: lucroAtualWeight,
                                                                    isShortViewport: isShortViewport,
@@ -717,6 +718,7 @@ class _PrecificacaoProdutosPageState extends State<PrecificacaoProdutosPage> {
                                                                      precoVendaCalculado: precoVendaCalculado,
                                                                      sellingPriceDefinedColor: sellingPriceDefinedColor,
                                                                      lucroAtualText: lucroAtualText,
+                lucroAtualPercent: lucroAtualPercent,
                                                                      lucroAtualColor: lucroAtualColor,
                                                                      lucroAtualWeight: lucroAtualWeight,
                                                                      isShortViewport: isShortViewport,
@@ -775,6 +777,10 @@ class _CategoriaFilter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DropdownButtonFormField<int?>(
+             // Menu de opções delimitado (fundo de card + cantos arredondados).
+             dropdownColor: AppDropdownStyle.menuColor(context),
+             borderRadius: AppDropdownStyle.menuRadius,
+             style: AppDropdownStyle.menuTextStyle(context),
       value: value,
       onChanged: loading ? null : onChanged,
       isExpanded: true,
@@ -880,6 +886,7 @@ class _ProdutoPrecificacaoTile extends StatelessWidget {
                 precoVendaCalculado: precoVendaCalculado,
                 sellingPriceDefinedColor: sellingPriceDefinedColor,
                 lucroAtualText: lucroAtualText,
+                lucroAtualPercent: lucroAtualPercent,
                 lucroAtualColor: lucroAtualColor,
                 lucroAtualWeight: lucroAtualWeight,
                 isShortViewport: isShortViewport,
@@ -1049,6 +1056,7 @@ class _ProdutoPrecificacaoMetrics extends StatelessWidget {
     required this.precoVendaCalculado,
     required this.sellingPriceDefinedColor,
     required this.lucroAtualText,
+    this.lucroAtualPercent,
     required this.lucroAtualColor,
     required this.lucroAtualWeight,
     required this.isShortViewport,
@@ -1060,6 +1068,9 @@ class _ProdutoPrecificacaoMetrics extends StatelessWidget {
   final double precoVendaCalculado;
   final Color sellingPriceDefinedColor;
   final String lucroAtualText;
+
+  /// Lucro atual em %, para escolher a cor do card (prejuízo/atenção/normal).
+  final double? lucroAtualPercent;
   final Color? lucroAtualColor;
   final FontWeight? lucroAtualWeight;
   final bool isShortViewport;
@@ -1084,7 +1095,7 @@ class _ProdutoPrecificacaoMetrics extends StatelessWidget {
         final rawPerRow = (availableHeight - rowGap - safetyPx) / 2;
         final perRowHeight = (rawPerRow.isFinite ? rawPerRow : 72.0).clamp(0.0, 92.0);
         final firstLine = [
-          _Metric(height: perRowHeight, label: 'Custo de produção', value: formatPtBrCurrency(row.custoProducao), dense: true, calculated: true),
+          _Metric(height: perRowHeight, label: 'Custo de produção', value: formatPtBrCurrency(row.custoProducao), dense: true, total: true),
           _Metric(
             height: perRowHeight,
             label: 'Qtd produzida',
@@ -1097,7 +1108,7 @@ class _ProdutoPrecificacaoMetrics extends StatelessWidget {
         ];
 
         final secondLine = [
-          _Metric(height: perRowHeight, label: 'Preço venda calculado R\$/un.', value: formatPtBrCurrency(precoVendaCalculado), dense: true, calculated: true),
+          _Metric(height: perRowHeight, label: 'Preço venda calculado R\$/un.', value: formatPtBrCurrency(precoVendaCalculado), dense: true, total: true),
           _Metric(
             height: perRowHeight,
             label: 'Preço venda definido R\$/un.',
@@ -1115,6 +1126,12 @@ class _ProdutoPrecificacaoMetrics extends StatelessWidget {
             valueWeight: lucroAtualWeight,
             dense: true,
             calculated: true,
+            // Prejuízo (< 0) em bordô; atenção (abaixo da margem da categoria) em âmbar.
+            backgroundColor: switch (lucroAtualPercent) {
+              final p? when p < 0 => AppStatusColors.lucroPrejuizoBackground,
+              final p? when p < row.percentualLucro => AppStatusColors.lucroAtencaoBackground,
+              _ => null,
+            },
           ),
           _Metric(
             height: perRowHeight,
@@ -1189,6 +1206,8 @@ class _Metric extends StatelessWidget {
     this.valueWeight,
     this.dense = false,
     this.calculated = false,
+    this.total = false,
+    this.backgroundColor,
   });
   final String label;
   final String value;
@@ -1202,10 +1221,18 @@ class _Metric extends StatelessWidget {
   /// de rótulo/valor, que não teriam contraste sobre o verde).
   final bool calculated;
 
+  /// Total calculado (conta sobre outros calculados): ameixa com borda dourado-mel.
+  final bool total;
+
+  /// Fundo no lugar do ameixa de calculado (ex.: lucro em prejuízo/atenção).
+  final Color? backgroundColor;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    // Total implica calculado.
+    final calculated = this.calculated || total;
     final labelColor = calculated ? AppStatusColors.onCalculatedValue.withValues(alpha: 0.85) : this.labelColor;
     final valueColor = calculated ? AppStatusColors.onCalculatedValue : this.valueColor;
     final h = height ?? 72.0;
@@ -1223,9 +1250,11 @@ class _Metric extends StatelessWidget {
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
         decoration: BoxDecoration(
-          color: calculated ? AppStatusColors.calculatedValueBackground : cs.surfaceContainerHighest,
+          color: backgroundColor ?? (calculated ? AppStatusColors.calculatedValueBackground : cs.surfaceContainerHighest),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+          border: total
+              ? Border.all(color: AppStatusColors.totalCalculadoBorder, width: AppStatusColors.totalCalculadoBorderWidth)
+              : Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
         ),
         child: Center(
           child: Column(

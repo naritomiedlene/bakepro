@@ -80,6 +80,9 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
   List<Map<String, dynamic>> _kitClassificacoes = const [];
   int? _kitClassificacaoFiltroId;
 
+  // Produto: filtro por categoria (null = TODOS).
+  int? _produtoCategoriaFiltroId;
+
   final TextEditingController _receitaSearchController = TextEditingController();
   String _receitaSearchQuery = '';
 
@@ -776,6 +779,7 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
       _resetItemSearchIfNeeded();
       _marcaSearchController.text = '';
       _marcaSearchQuery = '';
+      _produtoCategoriaFiltroId = null;
       _load();
     }
   }
@@ -873,12 +877,15 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
     }
 
     final q = _produtoSearchQuery.trim().toLowerCase();
-    if (q.isEmpty) {
+    final categoriaId = _produtoCategoriaFiltroId;
+    if (q.isEmpty && categoriaId == null) {
       _produtoFilteredRows = _rows;
       return;
     }
 
     bool matches(Map<String, dynamic> row) {
+      if (categoriaId != null && (row['categoriaid'] as num?)?.toInt() != categoriaId) return false;
+      if (q.isEmpty) return true;
       final nome = row['nome']?.toString().trim().toLowerCase() ?? '';
       return nome.contains(q);
     }
@@ -1280,10 +1287,12 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
         if (widget.definition.keyName != 'ingrediente') _totalCustoMateriaisReceita = null;
       }
 
-      // Despesas fixas e variáveis: sempre em ordem alfabética do nome da despesa
-      // (sem diferenciar maiúsculas/acentos). Nas variáveis o nome vem do item.
+      // Despesas fixas/variáveis e Produtos: sempre em ordem alfabética do nome
+      // (sem diferenciar maiúsculas/acentos). Nas despesas variáveis o nome vem do item.
       var rowsOrdenadas = rows;
-      if (widget.definition.keyName == 'rateiodespesa' || widget.definition.keyName == 'despesavariavel') {
+      if (widget.definition.keyName == 'rateiodespesa' ||
+          widget.definition.keyName == 'despesavariavel' ||
+          widget.definition.keyName == 'produto') {
         String nomeDespesa(Map<String, dynamic> r) {
           final item = r['item'];
           final nome = widget.definition.keyName == 'despesavariavel' && item is Map ? item['nome'] : r['nome'];
@@ -2338,6 +2347,10 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                     Expanded(
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<int?>(
+                          // Menu de opções delimitado (fundo de card + cantos arredondados).
+                          dropdownColor: AppDropdownStyle.menuColor(context),
+                          borderRadius: AppDropdownStyle.menuRadius,
+                          style: AppDropdownStyle.menuTextStyle(context),
                           value: _kitClassificacaoFiltroId,
                           isExpanded: true,
                           items: [
@@ -2350,6 +2363,68 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                                 ),
                           ],
                           onChanged: (v) => setState(() => _kitClassificacaoFiltroId = v),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+
+    // Produto: filtro por categoria (TODOS = sem filtro). As opções vêm das
+    // categorias dos produtos carregados (join `categoria:categoriaid(nome)`).
+    final produtoCategorias = <int, String>{};
+    if (isProduto) {
+      for (final r in _rows) {
+        final id = (r['categoriaid'] as num?)?.toInt();
+        final cat = r['categoria'];
+        final nome = cat is Map ? cat['nome']?.toString().trim() : null;
+        if (id != null && nome != null && nome.isNotEmpty) produtoCategorias[id] = nome;
+      }
+    }
+    final produtoCategoriasOrdenadas = produtoCategorias.entries.toList()
+      ..sort((a, b) => chaveOrdenacaoAlfabetica(a.value).compareTo(chaveOrdenacaoAlfabetica(b.value)));
+    final produtoCategoriaFilterField = !isProduto
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(AppRadius.xl),
+                border: Border.all(color: cs.outline.withValues(alpha: 0.14)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 2),
+                child: Row(
+                  children: [
+                    Icon(Icons.filter_list_rounded, size: 18, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 10),
+                    Text('Categoria:', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int?>(
+                          // Menu de opções delimitado (fundo de card + cantos arredondados).
+                          dropdownColor: AppDropdownStyle.menuColor(context),
+                          borderRadius: AppDropdownStyle.menuRadius,
+                          style: AppDropdownStyle.menuTextStyle(context),
+                          // Se a categoria escolhida sumiu da lista, volta para TODOS.
+                          value: produtoCategorias.containsKey(_produtoCategoriaFiltroId) ? _produtoCategoriaFiltroId : null,
+                          isExpanded: true,
+                          items: [
+                            const DropdownMenuItem<int?>(value: null, child: Text('TODOS')),
+                            for (final c in produtoCategoriasOrdenadas)
+                              DropdownMenuItem<int?>(
+                                value: c.key,
+                                child: Text(c.value, overflow: TextOverflow.ellipsis),
+                              ),
+                          ],
+                          onChanged: (v) => setState(() {
+                            _produtoCategoriaFiltroId = v;
+                            _applyProdutoFilter();
+                          }),
                         ),
                       ),
                     ),
@@ -2381,6 +2456,10 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
                     Expanded(
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<int?>(
+                          // Menu de opções delimitado (fundo de card + cantos arredondados).
+                          dropdownColor: AppDropdownStyle.menuColor(context),
+                          borderRadius: AppDropdownStyle.menuRadius,
+                          style: AppDropdownStyle.menuTextStyle(context),
                           value: _itemTipoFiltroId,
                           isExpanded: true,
                           items: [
@@ -2560,6 +2639,7 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
             const SizedBox(height: AppSpacing.sm),
             receitaFilterField,
             produtoFilterField,
+            produtoCategoriaFilterField,
             itemFilterField,
             marcaFilterField,
             itemTipoFilterField,
@@ -2685,7 +2765,7 @@ class _TotalDespesaVariavelLine extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           children: [
-            Icon(Icons.summarize_rounded, size: 18, color: AppStatusColors.onCalculatedValue),
+            Icon(AppIcons.valorCalculado, size: 18, color: AppStatusColors.onCalculatedValue),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -2729,7 +2809,7 @@ class _TotalDespesaFixaLine extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           children: [
-            Icon(Icons.summarize_rounded, size: 18, color: AppStatusColors.onCalculatedValue),
+            Icon(AppIcons.valorCalculado, size: 18, color: AppStatusColors.onCalculatedValue),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -2864,12 +2944,16 @@ class _ReceitaCostMiniCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+        // Total (Ingredientes + Materiais): borda dourado-mel de total calculado.
+        border: emphasize
+            ? Border.all(color: AppStatusColors.totalCalculadoBorder, width: AppStatusColors.totalCalculadoBorderWidth)
+            : Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: fg),
+          // Valor calculado: sempre o mesmo ícone (papel com "$").
+          const Icon(AppIcons.valorCalculado, size: 18, color: fg),
           const SizedBox(width: 10),
           Flexible(
             child: Row(
@@ -3012,7 +3096,7 @@ class _TotalCategoriaRateioLine extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           children: [
-            Icon(Icons.percent_rounded, size: 18, color: green ? onCalc : cs.onSurfaceVariant),
+            Icon(green ? AppIcons.valorCalculado : Icons.percent_rounded, size: 18, color: green ? onCalc : cs.onSurfaceVariant),
             const SizedBox(width: 8),
             Expanded(
               child: Text.rich(
@@ -3491,7 +3575,7 @@ class _ReceitaInlineCostsRow extends StatelessWidget {
     if (ingTxt == null && matTxt == null && totalTxt == null) return const SizedBox.shrink();
 
     Widget pill({required IconData icon, required String label, required String value, bool emphasize = false}) =>
-        _InlineInfoPill(icon: icon, label: label, value: value, colorScheme: cs, calculated: true);
+        _InlineInfoPill(icon: icon, label: label, value: value, colorScheme: cs, calculated: true, total: emphasize);
 
     return Container(
       decoration: BoxDecoration(
@@ -3671,7 +3755,7 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
                       label: 'Valor de lista para ${d.nome} - R\$',
                       value: valorLista == null ? '—' : formatPtBrCurrency(valorLista),
                       colorScheme: cs,
-                      calculated: true,
+                      total: true,
                     ),
                   ]),
                 );
@@ -3688,7 +3772,7 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
                       label: 'Valor total do kit - R\$',
                       value: formatPtBrCurrency(prod),
                       colorScheme: cs,
-                      calculated: true,
+                      total: true,
                     ),
                     if (valorListaSite != null) ...[
                       const SizedBox(width: AppSpacing.sm),
@@ -3697,7 +3781,7 @@ class _KitInlineInfoRowState extends State<_KitInlineInfoRow> {
                         label: 'Valor de lista do site - R\$',
                         value: formatPtBrCurrency(valorListaSite),
                         colorScheme: cs,
-                        calculated: true,
+                        total: true,
                       ),
                     ],
               ]),
@@ -3790,7 +3874,7 @@ class _ProdutoInlineInfoPills extends StatelessWidget {
           foregroundColor: AppStatusColors.onCategoria,
         ),
       if (custoProducao != null)
-        _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo de produção', value: formatPtBrCurrency(custoProducao), colorScheme: cs, calculated: true),
+        _InlineInfoPill(icon: Icons.request_quote_rounded, label: 'Custo de produção', value: formatPtBrCurrency(custoProducao), colorScheme: cs, total: true),
       if (qtdTxt != null)
         _InlineInfoPill(icon: Icons.inventory_rounded, label: 'Qtd produzida', value: qtdTxt, colorScheme: cs),
     ];
@@ -3836,6 +3920,7 @@ class _InlineInfoPill extends StatelessWidget {
     this.backgroundColor,
     this.foregroundColor,
     this.calculated = false,
+    this.total = false,
   });
 
   final IconData? icon;
@@ -3849,6 +3934,9 @@ class _InlineInfoPill extends StatelessWidget {
   /// Valor calculado pelo app: card ameixa padrão.
   final bool calculated;
 
+  /// Total calculado: card ameixa com borda dourado-mel.
+  final bool total;
+
   @override
   Widget build(BuildContext context) => InfoPill(
         icon: icon,
@@ -3858,6 +3946,7 @@ class _InlineInfoPill extends StatelessWidget {
         backgroundColor: backgroundColor,
         foregroundColor: foregroundColor,
         calculated: calculated,
+        total: total,
       );
 }
 

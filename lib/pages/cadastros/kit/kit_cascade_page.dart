@@ -581,7 +581,7 @@ class _KitCascadePageState extends State<KitCascadePage> {
                                         final precoCalc = _produtoMetricsCache[produtoId]?.precoVendaCalculado;
                                         final value = precoCalc == null ? '—' : '${formatPtBrCurrency(precoCalc)}/un';
                                         return <Widget>[
-                                          _InlineMetricPill(icon: Icons.calculate_rounded, label: 'Preço venda calc.', value: value, calculated: true),
+                                          _InlineMetricPill(icon: Icons.calculate_rounded, label: 'Preço venda calc.', value: value, total: true),
                                         ];
                                       }(),
                                       secondaryLine: _formatValorVendaUnitario(row['produto']),
@@ -597,19 +597,20 @@ class _KitCascadePageState extends State<KitCascadePage> {
                                         final categoriaLucroValue = _formatPercent(catPct);
                                         final lucroAtualValue = _formatSignedPercent(lucroPct);
 
-                                        final cs = Theme.of(context).colorScheme;
-                                        final isBelowCategoria = (catPct != null && lucroPct != null) ? (lucroPct < catPct) : false;
                                         return <Widget>[
                                           _InlineMetricPill(icon: Icons.percent_rounded, label: 'Margem cat.', value: categoriaLucroValue),
+                                          // Mesmos estados da Precificação: prejuízo (< 0) bordô;
+                                          // atenção (abaixo da margem da categoria) âmbar; normal ameixa.
                                           _InlineMetricPill(
-                                            icon: isBelowCategoria ? Icons.trending_down_rounded : Icons.trending_up_rounded,
+                                            icon: Icons.trending_up_rounded,
                                             label: 'Lucro atual',
                                             calculated: true,
                                             value: lucroAtualValue,
-                                            iconColor: isBelowCategoria ? cs.error : null,
-                                            valueColor: isBelowCategoria ? cs.error : null,
-                                            backgroundColor: isBelowCategoria ? cs.errorContainer.withValues(alpha: 0.35) : null,
-                                            borderColor: isBelowCategoria ? cs.error.withValues(alpha: 0.22) : null,
+                                            fillColor: switch (lucroPct) {
+                                              final p? when p < 0 => AppStatusColors.lucroPrejuizoBackground,
+                                              final p? when catPct != null && p < catPct => AppStatusColors.lucroAtencaoBackground,
+                                              _ => null,
+                                            },
                                           ),
                                         ];
                                       }(),
@@ -768,13 +769,13 @@ class _KitHeaderCard extends StatelessWidget {
                           _InlineValuePill(
                             icon: Icons.payments_rounded,
                             label: 'Valor total embalagem - R\$',
-                            calculated: true,
+                            total: true,
                             value: totalEmbalagensComTaxaValue == null ? '—' : formatPtBrCurrency(totalEmbalagensComTaxaValue),
                           ),
                           _InlineValuePill(
                             icon: Icons.account_balance_wallet_rounded,
                             label: 'Valor total do kit - R\$',
-                            calculated: true,
+                            total: true,
                             value: totalKit == null ? '—' : formatPtBrCurrency(totalKit!),
                           ),
                         ],
@@ -833,32 +834,34 @@ class _KitPill extends StatelessWidget {
 }
 
 class _InfoMetricCard extends StatelessWidget {
-  const _InfoMetricCard({required this.icon, required this.label, required this.value, this.calculated = false});
+  const _InfoMetricCard({required this.icon, required this.label, required this.value, this.total = false});
 
   final IconData icon;
   final String label;
   final String value;
 
-  /// Valor calculado pelo app: card ameixa padrão, texto branco e fonte normal.
-  final bool calculated;
+  /// Total calculado (conta sobre outros calculados): ameixa com borda dourado-mel.
+  final bool total;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // Hoje o card só é usado para total (Valor no kit).
+    final calculated = total;
     const onCalc = AppStatusColors.onCalculatedValue;
 
     return DecoratedBox(
       decoration: BoxDecoration(
         color: calculated ? AppStatusColors.calculatedValueBackground : cs.surfaceContainerHighest.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: cs.outline.withValues(alpha: 0.14)),
+        border: total ? Border.all(color: AppStatusColors.totalCalculadoBorder, width: AppStatusColors.totalCalculadoBorderWidth) : Border.all(color: cs.outline.withValues(alpha: 0.14)),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 18, color: calculated ? onCalc : cs.tertiary),
+            Icon(calculated ? AppIcons.valorCalculado : icon, size: 18, color: calculated ? onCalc : cs.tertiary),
             const SizedBox(width: 8),
             Column(
               mainAxisSize: MainAxisSize.min,
@@ -966,7 +969,7 @@ class _KitChildCard extends StatelessWidget {
                   value: parsedSecondary?.value ?? secondaryLine!,
                 ),
               ...extraOneLineMetrics,
-              if (totalValue != null) _InlineMetricPill(icon: Icons.payments_rounded, label: 'Total', value: formatPtBrCurrency(totalValue), calculated: true),
+              if (totalValue != null) _InlineMetricPill(icon: Icons.payments_rounded, label: 'Total', value: formatPtBrCurrency(totalValue), total: true),
             ],
           )
         : Wrap(
@@ -980,7 +983,7 @@ class _KitChildCard extends StatelessWidget {
                   label: parsedSecondary?.key ?? 'Valor de venda unitário',
                   value: parsedSecondary?.value ?? secondaryLine!,
                 ),
-              if (totalValue != null) _InfoMetricCard(icon: Icons.payments_rounded, label: 'Valor no kit', value: formatPtBrCurrency(totalValue), calculated: true),
+              if (totalValue != null) _InfoMetricCard(icon: Icons.payments_rounded, label: 'Valor no kit', value: formatPtBrCurrency(totalValue), total: true),
             ],
           );
 
@@ -1015,22 +1018,31 @@ class _KitChildCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-                          if (titleTrailing.isNotEmpty) ...[
-                            const SizedBox(width: AppSpacing.sm),
-                            Flexible(
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: Wrap(
-                                  spacing: 8,
-                                  runSpacing: 6,
-                                  alignment: WrapAlignment.end,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: titleTrailing,
+                          // Nome com o tamanho do texto e os cards extras (ex.: Preço venda calc.)
+                          // logo ao lado; o espaço livre fica antes dos botões.
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                                  ),
                                 ),
-                              ),
+                                if (titleTrailing.isNotEmpty) ...[
+                                  const SizedBox(width: AppSpacing.sm),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 6,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: titleTrailing,
+                                  ),
+                                ],
+                              ],
                             ),
-                          ],
+                          ),
                           const SizedBox(width: AppSpacing.sm),
                           AppActionIconButton.edit(onPressed: onEdit),
                           const SizedBox(width: 6),
@@ -1099,30 +1111,34 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _InlineValuePill extends StatelessWidget {
-  const _InlineValuePill({required this.icon, required this.label, required this.value, this.calculated = false});
+  const _InlineValuePill({required this.icon, required this.label, required this.value, this.calculated = false, this.total = false});
   final IconData icon;
   final String label;
   final String value;
 
   /// Valor calculado pelo app: card ameixa padrão, texto branco e fonte normal.
   final bool calculated;
+  /// Total calculado (conta sobre outros calculados): ameixa com borda dourado-mel.
+  final bool total;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // Total implica calculado.
+    final calculated = this.calculated || total;
     const onCalc = AppStatusColors.onCalculatedValue;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: calculated ? AppStatusColors.calculatedValueBackground : cs.surfaceContainerHighest.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: cs.outline.withValues(alpha: 0.14)),
+        border: total ? Border.all(color: AppStatusColors.totalCalculadoBorder, width: AppStatusColors.totalCalculadoBorderWidth) : Border.all(color: cs.outline.withValues(alpha: 0.14)),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: calculated ? onCalc : cs.tertiary),
+            Icon(calculated ? AppIcons.valorCalculado : icon, size: 16, color: calculated ? onCalc : cs.tertiary),
             const SizedBox(width: 8),
             Text(
               label,
@@ -1151,42 +1167,42 @@ class _InlineMetricPill extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
-    this.iconColor,
-    this.valueColor,
-    this.backgroundColor,
-    this.borderColor,
     this.calculated = false,
+    this.total = false,
+    this.fillColor,
   });
   final IconData icon;
   final String label;
   final String value;
-  final Color? iconColor;
-  final Color? valueColor;
-  final Color? backgroundColor;
-  final Color? borderColor;
 
   /// Valor calculado pelo app: card ameixa padrão, texto branco e fonte normal.
-  /// Cores explícitas (ex.: alerta vermelho de lucro abaixo da margem) têm prioridade.
   final bool calculated;
+  /// Total calculado (conta sobre outros calculados): ameixa com borda dourado-mel.
+  final bool total;
+
+  /// Fundo no lugar do ameixa de calculado, mantendo texto branco (ex.: lucro em
+  /// prejuízo = bordô, abaixo da margem = âmbar).
+  final Color? fillColor;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // Verde só quando não há cor de alerta definida pelo chamador.
-    final green = calculated && backgroundColor == null;
+    final green = calculated || total;
     const onCalc = AppStatusColors.onCalculatedValue;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: backgroundColor ?? (green ? AppStatusColors.calculatedValueBackground : cs.surfaceContainerHighest.withValues(alpha: 0.55)),
+        color: green ? (fillColor ?? AppStatusColors.calculatedValueBackground) : cs.surfaceContainerHighest.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: borderColor ?? cs.outline.withValues(alpha: 0.14)),
+        border: (total && green)
+            ? Border.all(color: AppStatusColors.totalCalculadoBorder, width: AppStatusColors.totalCalculadoBorderWidth)
+            : Border.all(color: cs.outline.withValues(alpha: 0.14)),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 15, color: iconColor ?? (green ? onCalc : cs.tertiary)),
+            Icon(green ? AppIcons.valorCalculado : icon, size: 15, color: green ? onCalc : cs.tertiary),
             const SizedBox(width: 6),
             Text(
               label,
@@ -1200,7 +1216,7 @@ class _InlineMetricPill extends StatelessWidget {
             Text(
               value,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: valueColor ?? (green ? onCalc : cs.onSurface),
+                    color: green ? onCalc : cs.onSurface,
                     fontWeight: green ? FontWeight.normal : FontWeight.w900,
                   ),
             ),

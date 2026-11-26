@@ -529,6 +529,10 @@ class _ImportedLineCard extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             DropdownButtonFormField<int>(
+              // Menu de opções delimitado (fundo de card + cantos arredondados).
+              dropdownColor: AppDropdownStyle.menuColor(context),
+              borderRadius: AppDropdownStyle.menuRadius,
+              style: AppDropdownStyle.menuTextStyle(context),
               value: line.itemId,
               isExpanded: true,
               icon: Icon(Icons.keyboard_arrow_down_rounded, color: cs.onSurfaceVariant),
