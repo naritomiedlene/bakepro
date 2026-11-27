@@ -30,6 +30,7 @@ class CadastroField {
     this.required = false,
     this.fk,
     this.options,
+    this.maxLength,
   });
 
   final String column;
@@ -38,6 +39,10 @@ class CadastroField {
   final bool required;
   final CadastroForeignKey? fk;
   final List<CadastroOption>? options;
+
+  /// Limite de caracteres. Se null, o formulário usa o tamanho da coluna em
+  /// `db_column_lengths.dart`. Mostra o contador e não deixa digitar além disso.
+  final int? maxLength;
 }
 
 class CadastroDefinition {
@@ -430,6 +435,10 @@ class Cadastros {
           required: false,
           fk: CadastroForeignKey(table: 'unidade', idColumn: 'unidadeid', labelColumn: 'unidade', scopedByEmpresa: false),
         ),
+        // Embalagem: inteiros > 0 (default 1 no banco). Qtde comprada = qtdembalagem × qtditemporembalagem.
+        CadastroField(column: 'qtdembalagem', label: 'Qtde de Embalagem', type: CadastroFieldType.number, required: true),
+        CadastroField(column: 'qtditemporembalagem', label: 'Qtde de itens por embalagem', type: CadastroFieldType.number, required: true),
+        // Calculada no formulário (embalagens × itens por embalagem); não editável.
         // O rótulo ganha a unidade de compra selecionada no formulário. Deve ser > 0.
         CadastroField(column: 'qtdecomprada', label: 'Qtde comprada', type: CadastroFieldType.number, required: true),
         // Divisor do cálculo do custo: deve ser > 0.

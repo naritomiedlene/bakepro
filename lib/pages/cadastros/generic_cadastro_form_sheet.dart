@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:bakepro/pages/cadastros/cadastro_definitions.dart';
+import 'package:bakepro/pages/cadastros/db_column_lengths.dart';
 import 'package:bakepro/services/kit_service.dart';
 import 'package:bakepro/services/totaldespesas_service.dart';
 import 'package:bakepro/services/state/app_session_controller.dart';
@@ -801,7 +802,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       if (c.toLowerCase() == 'dataatualizacao') continue;
       if (_isStatusField(f) && !_isEdit) continue;
       if (c == 'empresaid') continue;
-      if (_isItem && c == 'custounitario') continue;
+      if (_isItem && (c == 'custounitario' || c == 'qtdecomprada')) continue;
       if (_isDespesaVariavel && c == 'valormensal') continue;
       // EmpresaDelivery: na edição a associação (empresa/delivery) não muda.
       if (_isEdit && widget.definition.keyName == 'empresadelivery' && c == 'deliveryid') continue;
@@ -850,22 +851,29 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       for (final col in const ['qtdecomprada', 'fatorconversao', 'valorcompra']) {
         _ctrls[col]?.addListener(_recomputeItemCustoUnitario);
       }
+      // `qtdecomprada` é calculada: embalagens × itens por embalagem.
+      for (final col in _itemEmbalagemColumns) {
+        _ctrls[col]?.addListener(_recomputeItemQtdeComprada);
+      }
     }
 
     // Defaults: newly added numeric columns that are NOT NULL in the DB.
     // Keep this conservative and only apply on insert.
     if (!_isEdit) {
-      for (final col in const ['custounitario', 'qtdestoqueinicial', 'taxadelivery']) {
+      for (final col in const ['custounitario', 'qtdestoqueinicial', 'taxadelivery', 'qtdembalagem', 'qtditemporembalagem']) {
         final ctrl = _ctrls[col];
         if (ctrl == null) continue;
         if (ctrl.text.trim().isEmpty) {
           ctrl.text = switch (col) {
             'custounitario' => '0,0000',
             'taxadelivery' => '0,00',
+            'qtdembalagem' || 'qtditemporembalagem' => '1',
             _ => '0',
           };
         }
       }
+      // Item novo: Qtde comprada já parte de 1 × 1.
+      if (_isItem) _recomputeItemQtdeComprada();
     }
 
     // Apply forced values as initial UI state (without overriding existing edit values).
@@ -1061,6 +1069,9 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     if (_isItem) {
       for (final col in const ['qtdecomprada', 'fatorconversao', 'valorcompra']) {
         _ctrls[col]?.removeListener(_recomputeItemCustoUnitario);
+      }
+      for (final col in _itemEmbalagemColumns) {
+        _ctrls[col]?.removeListener(_recomputeItemQtdeComprada);
       }
     }
 
@@ -1402,6 +1413,26 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     if (ctrl.text != formatted) ctrl.text = formatted;
     // Atualiza o card "Qtde comprada (unidade no item)" ao lado da qtde.
     if (mounted) setState(() {});
+  }
+
+  static const _itemEmbalagemColumns = ['qtdembalagem', 'qtditemporembalagem'];
+
+  /// Item: qtde comprada = qtde de embalagem × qtde de itens por embalagem.
+  /// Null enquanto algum dos dois não for inteiro > 0.
+  int? _computeItemQtdeComprada() {
+    final emb = int.tryParse(_ctrls['qtdembalagem']?.text.trim() ?? '');
+    final porEmb = int.tryParse(_ctrls['qtditemporembalagem']?.text.trim() ?? '');
+    if (emb == null || emb <= 0 || porEmb == null || porEmb <= 0) return null;
+    return emb * porEmb;
+  }
+
+  /// Atualiza o campo (bloqueado) Qtde comprada; o listener dele recalcula o custo.
+  void _recomputeItemQtdeComprada() {
+    final ctrl = _ctrls['qtdecomprada'];
+    if (!_isItem || ctrl == null) return;
+    final qtde = _computeItemQtdeComprada();
+    final formatted = qtde == null ? '' : _formatPtBrThousands(qtde, 2);
+    if (ctrl.text != formatted) ctrl.text = formatted;
   }
 
   /// Item: qtde comprada convertida para a unidade do item (qtde × fator).
@@ -1822,15 +1853,29 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     );
   }
 
+  /// Limite de caracteres do campo de texto: o da definição ou o tamanho da
+  /// coluna varchar no banco. Campos com máscara (CPF, CNPJ etc.) e números já
+  /// têm o tamanho controlado pelo formatter e ficam sem contador.
+  int? _textMaxLength(CadastroField f, {required bool hasMask}) {
+    if (f.maxLength != null) return f.maxLength;
+    if (f.type != CadastroFieldType.text || hasMask) return null;
+    return dbColumnMaxLength(widget.definition.table, f.column) ??
+        // Observação sem tamanho no banco: mantém o limite de 500.
+        (f.column.toLowerCase() == 'obs' ? 500 : null);
+  }
+
   Widget _buildDefaultField(BuildContext context, CadastroField f) {
     final enabled = (!_isEmpresa || _empresaFieldEnabled(f.column)) && (!_isFornecedor || _fornecedorFieldEnabled(f.column));
     final isCalculatedDespesaVariavelValorMensal = _isDespesaVariavel && f.column == 'valormensal';
     // Item: custo unitário = valor da compra / (qtde comprada × fator de conversão).
     final isCalculatedItemCustoUnitario = _isItem && f.column == 'custounitario';
+    // Item: qtde comprada = qtde de embalagem × qtde de itens por embalagem.
+    final isCalculatedItemQtdeComprada = _isItem && f.column == 'qtdecomprada';
     final readOnly = widget.readOnlyColumns.contains(f.column) ||
         !enabled ||
         isCalculatedDespesaVariavelValorMensal ||
-        isCalculatedItemCustoUnitario;
+        isCalculatedItemCustoUnitario ||
+        isCalculatedItemQtdeComprada;
 
     final isSenha = _isSenhaField(f);
     final obscure = isSenha ? (_obscureByColumn[f.column] ?? true) : false;
@@ -1917,6 +1962,10 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
           inputFormatters = const [
             _PtBrDecimalFormatter(maxIntDigits: 7, decimalDigits: 4, useThousandsSeparator: true),
           ];
+        } else if (_isItem && _itemEmbalagemColumns.contains(f.column)) {
+          // Inteiros (integer no banco); até 5 dígitos (máx. 99999).
+          keyboardType = const TextInputType.numberWithOptions(decimal: false, signed: false);
+          inputFormatters = [_DigitsOnlyMaxLengthFormatter(5)];
         } else if (_isItem && f.column == 'qtdecomprada') {
           // Mask: até 99.999.999,99 (pt-BR) -> numeric(10,2)
           inputFormatters = const [
@@ -1987,7 +2036,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       minLines: multiline ? 3 : null,
       maxLines: multiline ? 6 : 1,
       // Observação: coluna varchar(500) no banco; o contador mostra o limite.
-      maxLength: f.column.toLowerCase() == 'obs' ? 500 : null,
+      maxLength: _textMaxLength(f, hasMask: inputFormatters != null),
       textInputAction: multiline ? TextInputAction.newline : null,
       keyboardType: multiline ? TextInputType.multiline : keyboardType,
       textCapitalization: isEmail ? TextCapitalization.none : TextCapitalization.sentences,
@@ -2585,6 +2634,16 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
             }
           }
 
+          // Item: embalagens e itens por embalagem são inteiros > 0 (integer no banco).
+          if (_isItem && _itemEmbalagemColumns.contains(f.column)) {
+            if (parsed == null || parsed <= 0 || parsed != parsed.truncate()) {
+              _failSave('O campo "${f.label}" deve ser um número inteiro maior que zero.');
+              return;
+            }
+            data[f.column] = parsed.toInt();
+            continue;
+          }
+
           data[f.column] = parsed;
         } else {
           data[f.column] = raw;
@@ -3083,11 +3142,23 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     setState(() => _error = message.trim());
   }
 
+  /// Cadastros com título feminino: "Nova Marca" em vez de "Novo Marca".
+  static const _feminineKeyNames = {
+    'receita',
+    'marca',
+    'unidade',
+    'empresa',
+    'compra',
+    'uf',
+    'categoria',
+    'classificacaokit',
+  };
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final viewInsets = MediaQuery.viewInsetsOf(context);
-    final newPrefix = widget.definition.keyName == 'receita' ? 'Nova' : 'Novo';
+    final newPrefix = _feminineKeyNames.contains(widget.definition.keyName) ? 'Nova' : 'Novo';
     final title = _isEdit ? 'Editar ${widget.definition.title}' : '$newPrefix ${widget.definition.title}';
 
     return Padding(

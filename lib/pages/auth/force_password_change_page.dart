@@ -1,6 +1,7 @@
 import 'package:bakepro/services/state/app_session_controller.dart';
 import 'package:bakepro/supabase/supabase_config.dart';
 import 'package:bakepro/components/bakepro_centered_logo.dart';
+import 'package:bakepro/pages/cadastros/db_column_lengths.dart';
 import 'package:bakepro/theme.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -172,6 +173,8 @@ class _ForcePasswordChangePageState extends State<ForcePasswordChangePage> with 
                                   controller: _password1,
                                   // Cursor no primeiro campo ao abrir.
                                   autofocus: true,
+                                  // usuario.senha é varchar(20) no banco.
+                                  maxLength: dbColumnMaxLength('usuario', 'senha'),
                                   obscureText: _obscurePassword1,
                                   textInputAction: TextInputAction.next,
                                   onTap: _clearErrorOnUserInteraction,
@@ -196,6 +199,7 @@ class _ForcePasswordChangePageState extends State<ForcePasswordChangePage> with 
                                 const SizedBox(height: AppSpacing.md),
                                 TextField(
                                   controller: _password2,
+                                  maxLength: dbColumnMaxLength('usuario', 'senha'),
                                   obscureText: _obscurePassword2,
                                   textInputAction: TextInputAction.done,
                                   onTap: _clearErrorOnUserInteraction,

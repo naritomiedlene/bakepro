@@ -3981,6 +3981,7 @@ class _RowCard extends StatelessWidget {
     final isEmpresa = definition.keyName == 'empresa';
     final isUsuario = definition.keyName == 'usuario';
     final isMarca = definition.keyName == 'marca';
+    final isUnidade = definition.keyName == 'unidade';
     final isEmpresaTaxas = definition.keyName == 'empresataxas';
     final isItem = definition.keyName == 'item';
     final isRateio = definition.keyName == 'rateiodespesa';
@@ -4036,8 +4037,9 @@ class _RowCard extends StatelessWidget {
         : null;
 
     final embedActionsInTitleLine =
-        // Marca e Imposto/taxas: lápis e lixeira na mesma linha do nome.
+        // Marca, Unidade e Imposto/taxas: lápis e lixeira na mesma linha do nome.
         isMarca ||
+        isUnidade ||
         isEmpresaTaxas ||
         isItem ||
         isProduto ||
@@ -4480,8 +4482,8 @@ class _RowCard extends StatelessWidget {
   TextStyle? _titleStyle(BuildContext context, CadastroDefinition def) {
     // Compact title style for denser lists.
     final base = Theme.of(context).textTheme.titleSmall;
-    // Marca: nome com peso normal (mais leve).
-    if (def.keyName == 'marca') return base?.copyWith(fontWeight: FontWeight.normal);
+    // Marca e Unidade: nome com peso normal (mais leve).
+    if (def.keyName == 'marca' || def.keyName == 'unidade') return base?.copyWith(fontWeight: FontWeight.normal);
     if (def.keyName == 'rateiodespesa' || def.keyName == 'produto' || def.keyName == 'kit') {
       return base?.copyWith(fontWeight: FontWeight.w700);
     }
@@ -4577,7 +4579,7 @@ class _RowCard extends StatelessWidget {
     }
 
     // Marca e Rateio: só o nome em negrito (sem subtítulo).
-    if (def.keyName == 'marca' || def.keyName == 'rateiodespesa') return null;
+    if (def.keyName == 'marca' || def.keyName == 'unidade' || def.keyName == 'rateiodespesa') return null;
 
     // Ingrediente (lista aninhada da receita): exibir custos também.
     if (def.keyName == 'ingrediente') {
