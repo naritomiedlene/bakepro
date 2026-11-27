@@ -18,18 +18,27 @@ class ItemPdfReport {
       return (v == null || v.isEmpty || v == 'null') ? null : v;
     }
 
-    String custo(Object? raw) {
-      final v = parsePtBrNumber(raw);
-      return v == null ? '-' : formatPtBrCurrency(v, decimalDigits: 4);
+    // Custo por unidade de uso (ex.: "R$ 4,0000/Un.").
+    String custo(Map<String, dynamic> r) {
+      final v = parsePtBrNumber(r['custounitario']);
+      if (v == null) return '-';
+      final c = formatPtBrCurrency(v, decimalDigits: 4);
+      final u = rel(r['unidade'], 'unidade');
+      return u == null ? c : '$c/$u';
     }
 
     // Dados da compra: "-" quando não informados (0 ou vazio).
+    // A unidade de compra tem coluna própria.
     String qtdeComprada(Map<String, dynamic> r) {
       final v = parsePtBrNumber(r['qtdecomprada']);
       if (v == null || v == 0) return '-';
-      final u = rel(r['compraunidade'], 'unidade');
-      final q = formatPtBrMoneyThousands(v, decimalDigits: 2);
-      return u == null ? q : '$q $u';
+      return formatPtBrMoneyThousands(v, decimalDigits: 2);
+    }
+
+    // Embalagem: inteiros (default 1 no banco); "-" quando vazio.
+    String inteiro(Object? raw) {
+      final v = parsePtBrNumber(raw);
+      return v == null ? '-' : v.toInt().toString();
     }
 
     String fator(Object? raw) {
@@ -74,10 +83,13 @@ class ItemPdfReport {
       headers: const [
         'Item',
         'Marca',
+        'Unidade de compra',
+        'Qtde de embalagem',
+        'Itens por embalagem',
         'Qtde comprada',
         'Fator de conversão',
         'Valor da compra',
-        'Unidade',
+        'Unidade de uso',
         'Custo unitário',
         'Atualizado em',
       ],
@@ -91,19 +103,31 @@ class ItemPdfReport {
                 [
                   (r['nome'] ?? '').toString().trim(),
                   rel(r['marca'], 'nome') ?? '-',
+                  rel(r['compraunidade'], 'unidade') ?? '-',
+                  inteiro(r['qtdembalagem']),
+                  inteiro(r['qtditemporembalagem']),
                   qtdeComprada(r),
                   fator(r['fatorconversao']),
                   valorCompra(r['valorcompra']),
                   rel(r['unidade'], 'unidade') ?? '-',
-                  custo(r['custounitario']),
+                  custo(r),
                   data(r['dataatualizacao']),
                 ],
             ],
           ),
       ],
-      // Texto à esquerda (Item, Marca, Unidade); números à direita.
-      colunasEsquerda: const {0, 1, 5},
-      larguras: {0: const pw.FlexColumnWidth(3), 1: const pw.FlexColumnWidth(1.5)},
+      // Texto à esquerda (Item, Marca, unidades); números à direita.
+      colunasEsquerda: const {0, 1, 2, 8},
+      // Larguras para caber em uma linha: custo ("R$ 0,1500/Grama"), data e
+      // os cabeçalhos de embalagem; as demais colunas usam o padrão (1).
+      larguras: {
+        0: const pw.FlexColumnWidth(2.5),
+        1: const pw.FlexColumnWidth(1.4),
+        3: const pw.FlexColumnWidth(1.15),
+        4: const pw.FlexColumnWidth(1.15),
+        9: const pw.FlexColumnWidth(1.8),
+        10: const pw.FlexColumnWidth(1.25),
+      },
       mensagemVazio: 'Nenhum item encontrado para o filtro selecionado.',
     );
   }

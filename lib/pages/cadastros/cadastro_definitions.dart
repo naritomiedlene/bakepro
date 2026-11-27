@@ -422,7 +422,7 @@ class Cadastros {
         ),
         CadastroField(
           column: 'unidadeid',
-          label: 'Unidade do item para receita',
+          label: 'Unidade de uso',
           type: CadastroFieldType.number,
           required: true,
           fk: CadastroForeignKey(table: 'unidade', idColumn: 'unidadeid', labelColumn: 'unidade', scopedByEmpresa: false),
