@@ -796,6 +796,11 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
   String? get _autoFocusColumn {
     if (_autoFocusResolved) return _autoFocusColumnCache;
     _autoFocusResolved = true;
+    // O campo fixo (identificador) aparece primeiro na tela.
+    final pinned = _pinnedField;
+    if (pinned != null && !widget.readOnlyColumns.contains(pinned.column)) {
+      return _autoFocusColumnCache = pinned.column;
+    }
     for (final f in widget.definition.fields) {
       final c = f.column;
       if (widget.hiddenColumns.contains(c) || widget.readOnlyColumns.contains(c)) continue;
@@ -2214,7 +2219,10 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
         prefixText: '(',
         suffixText: ')',
         prefixIcon: Icon(Icons.phone_iphone_rounded, color: cs.onSurfaceVariant),
-        suffixIcon: readOnly ? const Icon(Icons.lock_rounded) : null,
+        // Ícones compactos (o padrão reserva 48px) para o campo caber só "(11)".
+        prefixIconConstraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        suffixIcon: readOnly ? const Icon(Icons.lock_rounded, size: 18) : null,
+        suffixIconConstraints: const BoxConstraints(minWidth: 24, minHeight: 24),
       ),
     );
   }
@@ -2316,9 +2324,13 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
         const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
-            Expanded(flex: 2, child: _buildEmpresaDddField(context)),
+            // Largura fixa: só cabe o ícone e "(11)"; + o cadeado quando somente leitura.
+            SizedBox(
+              width: widget.readOnlyColumns.contains('dddcelular') ? 96 : 72,
+              child: _buildEmpresaDddField(context),
+            ),
             const SizedBox(width: AppSpacing.md),
-            Expanded(flex: 5, child: _buildEmpresaCelularNumeroField(context)),
+            Expanded(child: _buildEmpresaCelularNumeroField(context)),
           ],
         ),
       ],
@@ -2405,6 +2417,49 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     );
   }
 
+  /// Campo identificador (ex.: Nome) fixo no topo do formulário, fora da
+  /// rolagem, para o usuário sempre ver o que está cadastrando/editando.
+  /// Ver `CadastroDefinition.pinnedField`.
+  CadastroField? get _pinnedField {
+    final f = widget.definition.pinnedField;
+    if (f == null || widget.hiddenColumns.contains(f.column)) return null;
+    return f;
+  }
+
+  /// Campo identificador em destaque: cartão tingido com a cor principal,
+  /// rótulo na cor principal e texto maior, sem a linha do campo.
+  Widget _buildPinnedFieldCard(BuildContext context, CadastroField f) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final labelStyle = theme.textTheme.bodyMedium?.copyWith(color: cs.primary);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: cs.primary.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: cs.primary.withValues(alpha: 0.35)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.xs, AppSpacing.md, 0),
+        child: Theme(
+          data: theme.copyWith(
+            inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
+              labelStyle: labelStyle,
+              floatingLabelStyle: labelStyle,
+            ),
+            textTheme: theme.textTheme.copyWith(
+              bodyLarge: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: cs.onSurface),
+            ),
+          ),
+          child: _buildField(context, f),
+        ),
+      ),
+    );
+  }
+
   List<Widget> _buildFormChildren(BuildContext context) {
     final children = <Widget>[];
 
@@ -2430,6 +2485,8 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       // status when editing.
       final omitFromUi =
           widget.hiddenColumns.contains(f.column) ||
+          // Identificador fica fixo acima da rolagem (ver `_pinnedField`).
+          identical(f, _pinnedField) ||
           // Item: o custo unitário aparece no card ao lado do Valor da compra.
           (_isItem && f.column == 'custounitario') ||
           (_isStatusField(f) && !_isEdit) ||
@@ -3187,6 +3244,10 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
               ),
               const SizedBox(height: AppSpacing.sm),
               const SizedBox(height: AppSpacing.md),
+              if (_pinnedField case final pinned?) ...[
+                _buildPinnedFieldCard(context, pinned),
+                const SizedBox(height: AppSpacing.md),
+              ],
               Flexible(
                 child: SingleChildScrollView(
                   child: Column(

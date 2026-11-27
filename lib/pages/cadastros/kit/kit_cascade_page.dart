@@ -521,7 +521,9 @@ class _KitCascadePageState extends State<KitCascadePage> {
                   tooltip: 'Voltar',
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                Expanded(child: Text('Kit', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
+                // Título fixo (fora da rolagem) com o nome do kit, para ele continuar
+                // visível quando o card do kit sai da tela.
+                Expanded(child: Text(_tituloComNome('Kit', _kit), maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
                 const SizedBox(width: AppSpacing.sm),
                 OutlinedButton.icon(
                   onPressed: _loading ? null : _load,
@@ -1312,3 +1314,9 @@ class _EmptyInlineCard extends StatelessWidget {
   }
 }
 
+
+/// "Produto: Bolo de cenoura" (ou só "Produto" enquanto o registro não carregou).
+String _tituloComNome(String entidade, Map<String, dynamic>? row) {
+  final nome = (row?['nome'] ?? '').toString().trim();
+  return nome.isEmpty ? entidade : '$entidade: $nome';
+}

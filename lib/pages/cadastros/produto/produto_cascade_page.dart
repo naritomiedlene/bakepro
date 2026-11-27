@@ -208,8 +208,9 @@ class _ProdutoCascadePageState extends State<ProdutoCascadePage> {
                   tooltip: 'Voltar',
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                // Mesmo padrão da tela do kit: título fixo (o nome do produto já aparece no card abaixo).
-                Expanded(child: Text('Produto', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
+                // Mesmo padrão da tela do kit: título fixo (fora da rolagem) com o nome
+                // do produto, para ele continuar visível quando o card sai da tela.
+                Expanded(child: Text(_tituloComNome('Produto', _produto), maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
                 const SizedBox(width: AppSpacing.sm),
                 OutlinedButton.icon(
                   onPressed: _loading ? null : _load,
@@ -919,3 +920,9 @@ class _InlineError extends StatelessWidget {
   }
 }
 
+
+/// "Produto: Bolo de cenoura" (ou só "Produto" enquanto o registro não carregou).
+String _tituloComNome(String entidade, Map<String, dynamic>? row) {
+  final nome = (row?['nome'] ?? '').toString().trim();
+  return nome.isEmpty ? entidade : '$entidade: $nome';
+}

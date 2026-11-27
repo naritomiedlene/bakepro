@@ -57,7 +57,23 @@ class CadastroDefinition {
     this.createdAtColumn,
     this.updatedAtColumn,
     this.visibleInMenu = true,
+    this.pinnedColumn,
   });
+
+  /// Campo que identifica o registro (ex.: nome). No formulário ele fica fixo
+  /// no topo, fora da rolagem, para o usuário sempre ver o que está editando.
+  /// Se null, usa a primeira coluna de `displayColumns` quando ela é um campo
+  /// de texto do formulário; caso contrário, nada fica fixo.
+  final String? pinnedColumn;
+
+  CadastroField? get pinnedField {
+    final column = pinnedColumn ?? (displayColumns.isEmpty ? null : displayColumns.first);
+    for (final f in fields) {
+      if (f.column != column) continue;
+      if (pinnedColumn != null || f.type == CadastroFieldType.text) return f;
+    }
+    return null;
+  }
 
   final String keyName;
   final String title;
@@ -544,6 +560,7 @@ class Cadastros {
       idColumn: 'produtoid',
       scopedByEmpresa: true,
       displayColumns: ['codigo', 'nome', 'status'],
+      pinnedColumn: 'nome',
       fields: [
         CadastroField(column: 'codigo', label: 'Código', type: CadastroFieldType.text, required: true),
         CadastroField(column: 'nome', label: 'Nome', type: CadastroFieldType.text, required: true),
