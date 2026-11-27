@@ -23,6 +23,25 @@ class ItemPdfReport {
       return v == null ? '-' : formatPtBrCurrency(v, decimalDigits: 4);
     }
 
+    // Dados da compra: "-" quando não informados (0 ou vazio).
+    String qtdeComprada(Map<String, dynamic> r) {
+      final v = parsePtBrNumber(r['qtdecomprada']);
+      if (v == null || v == 0) return '-';
+      final u = rel(r['compraunidade'], 'unidade');
+      final q = formatPtBrMoneyThousands(v, decimalDigits: 2);
+      return u == null ? q : '$q $u';
+    }
+
+    String fator(Object? raw) {
+      final v = parsePtBrNumber(raw);
+      return (v == null || v == 0) ? '-' : formatPtBrMoneyThousands(v, decimalDigits: 4);
+    }
+
+    String valorCompra(Object? raw) {
+      final v = parsePtBrNumber(raw);
+      return (v == null || v == 0) ? '-' : formatPtBrCurrency(v);
+    }
+
     String data(Object? raw) {
       final dt = raw == null ? null : DateTime.tryParse(raw.toString());
       if (dt == null) return '-';
@@ -52,7 +71,16 @@ class ItemPdfReport {
         'Tipo: $filtroTipo   |   Nome contém: ${filtroNome.isEmpty ? '(sem filtro)' : '"$filtroNome"'}   |   Itens: ${itens.length}',
       ],
       // A coluna Tipo sai da tabela: o tipo é o título de cada grupo.
-      headers: const ['Item', 'Marca', 'Unidade', 'Custo unitário', 'Atualizado em'],
+      headers: const [
+        'Item',
+        'Marca',
+        'Qtde comprada',
+        'Fator de conversão',
+        'Valor da compra',
+        'Unidade',
+        'Custo unitário',
+        'Atualizado em',
+      ],
       grupos: [
         for (final tipo in tipos)
           RelatorioPdfGrupo(
@@ -63,6 +91,9 @@ class ItemPdfReport {
                 [
                   (r['nome'] ?? '').toString().trim(),
                   rel(r['marca'], 'nome') ?? '-',
+                  qtdeComprada(r),
+                  fator(r['fatorconversao']),
+                  valorCompra(r['valorcompra']),
                   rel(r['unidade'], 'unidade') ?? '-',
                   custo(r['custounitario']),
                   data(r['dataatualizacao']),
@@ -70,7 +101,8 @@ class ItemPdfReport {
             ],
           ),
       ],
-      colunasEsquerda: const {0, 1, 2},
+      // Texto à esquerda (Item, Marca, Unidade); números à direita.
+      colunasEsquerda: const {0, 1, 5},
       larguras: {0: const pw.FlexColumnWidth(3), 1: const pw.FlexColumnWidth(1.5)},
       mensagemVazio: 'Nenhum item encontrado para o filtro selecionado.',
     );

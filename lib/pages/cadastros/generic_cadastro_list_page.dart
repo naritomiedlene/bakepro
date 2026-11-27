@@ -1000,7 +1000,8 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
         // Item: embed related labels used by the 2-line list layout:
         // - Marca + TipoItem for the 2nd line
         // - Unidade to show "(gr)", "(ml)", etc on the 1st line
-        select = '*, marca:marcaid(nome), tipoitem:tipoitemid(nome), unidade:unidadeid(unidade)';
+        // + unidade de compra (relatório PDF: "Qtde comprada 2,00 Kg").
+        select = '*, marca:marcaid(nome), tipoitem:tipoitemid(nome), unidade:unidadeid(unidade), compraunidade:compraunidadeid(unidade)';
       } else if (shouldEmbedUnidadeForReceita) {
         select = '*, unidade:unidadeid(unidade)';
       } else if (shouldEmbedCategoriaForProduto) {
