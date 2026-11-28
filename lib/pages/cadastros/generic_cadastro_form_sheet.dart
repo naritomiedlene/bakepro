@@ -1523,9 +1523,8 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
   Widget _buildItemQtdeCompradaRow(BuildContext context, CadastroField f) {
     final field = _buildField(context, f);
     final convertida = _computeItemQtdeConvertida();
-    // Sempre um Row com o campo como 1º filho: trocar a estrutura faria o
-    // TextField perder o foco enquanto o usuário digita.
-    if (convertida == null) return Row(children: [Expanded(child: field)]);
+    // O card fica sempre visível ("—" até ter qtde e fator), como o do custo
+    // unitário, para não aparecer/sumir enquanto o usuário preenche.
 
     final t = Theme.of(context).textTheme;
     // Valor calculado (qtde × fator): card ameixa padrão, texto branco.
@@ -1553,7 +1552,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
                 children: [
                   Text(label, textAlign: TextAlign.center, style: t.labelSmall?.copyWith(color: fg.withValues(alpha: 0.85)), overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 2),
-                  Text(_formatPtBrQtde(convertida), textAlign: TextAlign.center, style: t.bodyLarge?.copyWith(color: fg, fontWeight: FontWeight.w700)),
+                  Text(convertida == null ? '—' : _formatPtBrQtde(convertida), textAlign: TextAlign.center, style: t.bodyLarge?.copyWith(color: fg, fontWeight: FontWeight.w700)),
                 ],
               ),
             ),
@@ -2032,7 +2031,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
     // Descrição: começa com 3 linhas e cresce até 6 (depois rola). Enter cria nova linha.
     final multiline = _isMultilineField(f) && !isSenha;
 
-    return TextField(
+    final textField = TextField(
       controller: _ctrls[f.column],
       focusNode: (_isDespesaVariavel && f.column == 'valormensal') ? _dvValorMensalFocusNode : null,
       autofocus: _autoFocusFor(f),
@@ -2091,6 +2090,9 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
         suffixIcon: suffix,
       ),
     );
+    // Item: a qtde comprada é calculada; fica fora da navegação (Tab/Enter),
+    // que passa direto das embalagens para o Fator de conversão.
+    return isCalculatedItemQtdeComprada ? ExcludeFocus(child: textField) : textField;
   }
 
   Widget _buildCompraDateField(BuildContext context, CadastroField f) {
@@ -3249,11 +3251,15 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
                 const SizedBox(height: AppSpacing.md),
               ],
               Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      ..._buildFormChildren(context),
-                    ],
+                // Grupo de foco: o Tab percorre todos os campos (inclusive os que
+                // estão abaixo da área visível) antes de ir para Cancelar/Salvar.
+                child: FocusTraversalGroup(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        ..._buildFormChildren(context),
+                      ],
+                    ),
                   ),
                 ),
               ),
