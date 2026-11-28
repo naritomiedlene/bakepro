@@ -1001,7 +1001,7 @@ class _GenericCadastroListPageState extends State<GenericCadastroListPage> with 
         // - Marca + TipoItem for the 2nd line
         // - Unidade to show "(gr)", "(ml)", etc on the 1st line
         // + unidade de compra (relatório PDF: "Qtde comprada 2,00 Kg").
-        select = '*, marca:marcaid(nome), tipoitem:tipoitemid(nome), unidade:unidadeid(unidade), compraunidade:compraunidadeid(unidade)';
+        select = '*, marca:marcaid(nome), tipoitem:tipoitemid(nome), unidade:unidadeid(unidade), compraunidade:compraunidadeid(unidade), conteudounidade:conteudounidadeid(unidade)';
       } else if (shouldEmbedUnidadeForReceita) {
         select = '*, unidade:unidadeid(unidade)';
       } else if (shouldEmbedCategoriaForProduto) {

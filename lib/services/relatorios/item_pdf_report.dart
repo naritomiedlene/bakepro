@@ -29,10 +29,35 @@ class ItemPdfReport {
 
     // Dados da compra: "-" quando não informados (0 ou vazio).
     // A unidade de compra tem coluna própria.
+    // Qtde comprada na unidade de conteúdo (ex.: "2.000,00 Metro").
     String qtdeComprada(Map<String, dynamic> r) {
       final v = parsePtBrNumber(r['qtdecomprada']);
       if (v == null || v == 0) return '-';
-      return formatPtBrMoneyThousands(v, decimalDigits: 2);
+      final q = formatPtBrMoneyThousands(v, decimalDigits: 2);
+      final u = rel(r['conteudounidade'], 'unidade');
+      return u == null ? q : '$q $u';
+    }
+
+    // Conteúdo de cada item na unidade de conteúdo (ex.: "100,00 Metro"),
+    // com 2 a 4 casas (zeros finais além da 2ª casa removidos).
+    String conteudoItem(Map<String, dynamic> r) {
+      final v = parsePtBrNumber(r['conteudoitem']);
+      if (v == null || v == 0) return '-';
+      var q = formatPtBrMoneyThousands(v, decimalDigits: 4);
+      while (q.endsWith('0') && q.length - q.lastIndexOf(',') - 1 > 2) {
+        q = q.substring(0, q.length - 1);
+      }
+      final u = rel(r['conteudounidade'], 'unidade');
+      return u == null ? q : '$q $u';
+    }
+
+    // Qtde comprada na unidade de uso (qtde × fator, ex.: "200.000,00 Cm").
+    String qtdeCompradaItem(Map<String, dynamic> r) {
+      final v = parsePtBrNumber(r['qtdecompradaitem']);
+      if (v == null || v == 0) return '-';
+      final q = formatPtBrMoneyThousands(v, decimalDigits: 2);
+      final u = rel(r['unidade'], 'unidade');
+      return u == null ? q : '$q $u';
     }
 
     // Embalagem: inteiros (default 1 no banco); "-" quando vazio.
@@ -84,10 +109,12 @@ class ItemPdfReport {
         'Item',
         'Marca',
         'Unidade de compra',
-        'Qtde de embalagem',
+        'Qtde de embalagens',
         'Itens por embalagem',
+        'Qtde de conteúdo por item',
         'Qtde comprada',
         'Fator de conversão',
+        'Qtde comprada na unidade de uso',
         'Valor da compra',
         'Unidade de uso',
         'Custo unitário',
@@ -106,8 +133,10 @@ class ItemPdfReport {
                   rel(r['compraunidade'], 'unidade') ?? '-',
                   inteiro(r['qtdembalagem']),
                   inteiro(r['qtditemporembalagem']),
+                  conteudoItem(r),
                   qtdeComprada(r),
                   fator(r['fatorconversao']),
+                  qtdeCompradaItem(r),
                   valorCompra(r['valorcompra']),
                   rel(r['unidade'], 'unidade') ?? '-',
                   custo(r),
@@ -117,16 +146,21 @@ class ItemPdfReport {
           ),
       ],
       // Texto à esquerda (Item, Marca, unidades); números à direita.
-      colunasEsquerda: const {0, 1, 2, 8},
+      colunasEsquerda: const {0, 1, 2, 10},
       // Larguras para caber em uma linha: custo ("R$ 0,1500/Grama"), data e
       // os cabeçalhos de embalagem; as demais colunas usam o padrão (1).
       larguras: {
-        0: const pw.FlexColumnWidth(2.5),
-        1: const pw.FlexColumnWidth(1.4),
-        3: const pw.FlexColumnWidth(1.15),
-        4: const pw.FlexColumnWidth(1.15),
-        9: const pw.FlexColumnWidth(1.8),
-        10: const pw.FlexColumnWidth(1.25),
+        0: const pw.FlexColumnWidth(1.45),
+        1: const pw.FlexColumnWidth(1.1),
+        3: const pw.FlexColumnWidth(1.4),
+        4: const pw.FlexColumnWidth(1.25),
+        5: const pw.FlexColumnWidth(1.25),
+        6: const pw.FlexColumnWidth(1.3),
+        7: const pw.FlexColumnWidth(1.25),
+        8: const pw.FlexColumnWidth(1.4),
+        9: const pw.FlexColumnWidth(1.35),
+        11: const pw.FlexColumnWidth(1.85),
+        12: const pw.FlexColumnWidth(1.3),
       },
       mensagemVazio: 'Nenhum item encontrado para o filtro selecionado.',
     );

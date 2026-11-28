@@ -451,11 +451,21 @@ class Cadastros {
           required: false,
           fk: CadastroForeignKey(table: 'unidade', idColumn: 'unidadeid', labelColumn: 'unidade', scopedByEmpresa: false),
         ),
-        // Embalagem: inteiros > 0 (default 1 no banco). Qtde comprada = qtdembalagem × qtditemporembalagem.
-        CadastroField(column: 'qtdembalagem', label: 'Qtde de Embalagem', type: CadastroFieldType.number, required: true),
+        // Unidade em que é medido o conteúdo de cada item comprado (ex.: ml de uma garrafa).
+        CadastroField(
+          column: 'conteudounidadeid',
+          label: 'Unidade de conteúdo do item',
+          type: CadastroFieldType.number,
+          required: true,
+          fk: CadastroForeignKey(table: 'unidade', idColumn: 'unidadeid', labelColumn: 'unidade', scopedByEmpresa: false),
+        ),
+        // Embalagem: inteiros > 0 (default 1 no banco). Qtde comprada = qtdembalagem × qtditemporembalagem × conteudoitem.
+        CadastroField(column: 'qtdembalagem', label: 'Qtde de embalagens', type: CadastroFieldType.number, required: true),
         CadastroField(column: 'qtditemporembalagem', label: 'Qtde de itens por embalagem', type: CadastroFieldType.number, required: true),
-        // Calculada no formulário (embalagens × itens por embalagem); não editável.
-        // O rótulo ganha a unidade de compra selecionada no formulário. Deve ser > 0.
+        // Conteúdo de cada item na unidade de conteúdo: numeric(12,4), default 0.
+        CadastroField(column: 'conteudoitem', label: 'Qtde de conteúdo por item', type: CadastroFieldType.number, required: true),
+        // Calculada no formulário (embalagens × itens por embalagem × conteúdo por item); não editável.
+        // O rótulo ganha a unidade de conteúdo selecionada no formulário. Deve ser > 0.
         CadastroField(column: 'qtdecomprada', label: 'Qtde comprada', type: CadastroFieldType.number, required: true),
         // Divisor do cálculo do custo: deve ser > 0.
         CadastroField(column: 'fatorconversao', label: 'Fator de conversão', type: CadastroFieldType.number, required: true),

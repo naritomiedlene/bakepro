@@ -740,7 +740,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       if (_isProduto && f.column == 'valorvenda') {
         return _formatPtBrFixed(parsed, 2);
       }
-      if (_isItem && (f.column == 'custounitario' || f.column == 'fatorconversao')) {
+      if (_isItem && (f.column == 'custounitario' || f.column == 'fatorconversao' || f.column == 'conteudoitem')) {
         return _formatPtBrFixed(parsed, 4);
       }
       if (_isItem && (f.column == 'qtdecomprada' || f.column == 'valorcompra')) {
@@ -856,8 +856,8 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       for (final col in const ['qtdecomprada', 'fatorconversao', 'valorcompra']) {
         _ctrls[col]?.addListener(_recomputeItemCustoUnitario);
       }
-      // `qtdecomprada` é calculada: embalagens × itens por embalagem.
-      for (final col in _itemEmbalagemColumns) {
+      // `qtdecomprada` é calculada: embalagens × itens por embalagem × conteúdo por item.
+      for (final col in _itemQtdeCompradaColumns) {
         _ctrls[col]?.addListener(_recomputeItemQtdeComprada);
       }
     }
@@ -877,7 +877,10 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
           };
         }
       }
-      // Item novo: Qtde comprada já parte de 1 × 1.
+      // Item novo: conteúdo por item parte de 0 (default do banco, not null).
+      final conteudo = _isItem ? _ctrls['conteudoitem'] : null;
+      if (conteudo != null && conteudo.text.trim().isEmpty) conteudo.text = '0,0000';
+      // Item novo: Qtde comprada fica vazia até informar o conteúdo por item.
       if (_isItem) _recomputeItemQtdeComprada();
     }
 
@@ -1075,7 +1078,7 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
       for (final col in const ['qtdecomprada', 'fatorconversao', 'valorcompra']) {
         _ctrls[col]?.removeListener(_recomputeItemCustoUnitario);
       }
-      for (final col in _itemEmbalagemColumns) {
+      for (final col in _itemQtdeCompradaColumns) {
         _ctrls[col]?.removeListener(_recomputeItemQtdeComprada);
       }
     }
@@ -1384,7 +1387,8 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
   /// Item: rótulo da unidade de compra selecionada (ex.: "kg"), para o label da qtde.
   String? _itemCompraUnidadeLabel() => _itemUnidadeLabel('compraunidadeid');
 
-  /// Item: rótulo da unidade selecionada em [column] (`unidadeid` ou `compraunidadeid`).
+  /// Item: rótulo da unidade selecionada em [column] (`unidadeid`, `compraunidadeid`
+  /// ou `conteudounidadeid`).
   String? _itemUnidadeLabel(String column) {
     if (!_isItem) return null;
     final id = num.tryParse(_ctrls[column]?.text.trim() ?? '');
@@ -1422,13 +1426,18 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
 
   static const _itemEmbalagemColumns = ['qtdembalagem', 'qtditemporembalagem'];
 
-  /// Item: qtde comprada = qtde de embalagem × qtde de itens por embalagem.
-  /// Null enquanto algum dos dois não for inteiro > 0.
-  int? _computeItemQtdeComprada() {
+  /// Campos que alteram a qtde comprada.
+  static const _itemQtdeCompradaColumns = ['qtdembalagem', 'qtditemporembalagem', 'conteudoitem'];
+
+  /// Item: qtde comprada (na unidade de conteúdo) = qtde de embalagens
+  /// × qtde de itens por embalagem × qtde de conteúdo por item,
+  /// arredondada a 2 casas (numeric(10,2)). Null enquanto algum não for > 0.
+  double? _computeItemQtdeComprada() {
     final emb = int.tryParse(_ctrls['qtdembalagem']?.text.trim() ?? '');
     final porEmb = int.tryParse(_ctrls['qtditemporembalagem']?.text.trim() ?? '');
-    if (emb == null || emb <= 0 || porEmb == null || porEmb <= 0) return null;
-    return emb * porEmb;
+    final conteudo = _parsePtBrNumber(_ctrls['conteudoitem']?.text.trim() ?? '');
+    if (emb == null || emb <= 0 || porEmb == null || porEmb <= 0 || conteudo == null || conteudo <= 0) return null;
+    return (emb * porEmb * conteudo * 100).roundToDouble() / 100;
   }
 
   /// Atualiza o campo (bloqueado) Qtde comprada; o listener dele recalcula o custo.
@@ -1970,6 +1979,11 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
           // Inteiros (integer no banco); até 5 dígitos (máx. 99999).
           keyboardType = const TextInputType.numberWithOptions(decimal: false, signed: false);
           inputFormatters = [_DigitsOnlyMaxLengthFormatter(5)];
+        } else if (_isItem && f.column == 'conteudoitem') {
+          // Mask: até 99.999.999,9999 (pt-BR) -> numeric(12,4)
+          inputFormatters = const [
+            _PtBrDecimalFormatter(maxIntDigits: 8, decimalDigits: 4, useThousandsSeparator: true),
+          ];
         } else if (_isItem && f.column == 'qtdecomprada') {
           // Mask: até 99.999.999,99 (pt-BR) -> numeric(10,2)
           inputFormatters = const [
@@ -2067,18 +2081,22 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
                             final base = unidade == null ? f.label : '${f.label} ($unidade)';
                             return f.required ? '$base *' : base;
                           }()
-                    : (_isItem && f.column == 'qtdecomprada')
+                    : (_isItem && (f.column == 'qtdecomprada' || f.column == 'qtditemporembalagem' || f.column == 'conteudoitem'))
                         ? () {
-                            final unidade = _itemCompraUnidadeLabel();
+                            // Itens por embalagem: unidade de compra;
+                            // conteúdo por item e qtde comprada: unidade de conteúdo.
+                            final unidade = f.column != 'qtditemporembalagem'
+                                ? _itemUnidadeLabel('conteudounidadeid')
+                                : _itemCompraUnidadeLabel();
                             final base = unidade == null ? f.label : '${f.label} ($unidade)';
                             return f.required ? '$base *' : base;
                           }()
                         : (_isItem && f.column == 'fatorconversao')
                             ? () {
-                                // "Fator de conversão de <unidade de compra> -> <unidade no item>"
+                                // "Fator de conversão de <unidade de conteúdo> -> <unidade no item>"
                                 final unidade = _itemUnidadeLabel('unidadeid') ?? '?';
-                                final compra = _itemCompraUnidadeLabel() ?? '?';
-                                final base = '${f.label} de $compra -> $unidade';
+                                final conteudo = _itemUnidadeLabel('conteudounidadeid') ?? '?';
+                                final base = '${f.label} de $conteudo -> $unidade';
                                 return f.required ? '$base *' : base;
                               }()
                             : (_isItem && f.column == 'custounitario')
@@ -2717,6 +2735,9 @@ class _GenericCadastroFormSheetState extends State<GenericCadastroFormSheet> {
           return;
         }
         data['custounitario'] = custo;
+        // Qtde comprada na unidade do item (qtde × fator), para relatórios.
+        final convertida = _computeItemQtdeConvertida();
+        data['qtdecompradaitem'] = convertida == null ? 0 : (convertida * 10000).roundToDouble() / 10000;
       }
 
       // Imposto e taxas da empresa: regras de inclusão/edição.
